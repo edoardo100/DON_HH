@@ -1,0 +1,13 @@
+dataname      : "datasetHH_test1.mat"
+split         : 1600
+scaling       : "Gaussian"                # Default, Gaussian, or Mixed
+adapt_actfun  : False
+scheduler     : "None"                    # None or Exp
+Loss          : "MSE"
+epochs        : 10000
+lr            : 0.001
+u_dim         : 3                         # Input dimension for Branch Net
+x_dim         : 1                         # Input dimension for Trunk Net
+G_dim         : 100                       # Output dimension
+inner_layer_b : [50, 50, 50, 50, 50, 50]  
+inner_layer_t : [50, 50, 50, 50, 50, 50] 
