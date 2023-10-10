@@ -1,9 +1,10 @@
 dataname      : "datasetHH_test1.mat"
 split         : 1600
+batch_size    : 50
 scaling       : "Gaussian"                # Default, Gaussian, or Mixed
-adapt_actfun  : False
+adapt_actfun  : True
 scheduler     : "None"                    # None or Exp
-Loss          : "MSE"
+Loss          : "L2"                      # MSE or L2
 epochs        : 10000
 lr            : 0.001
 u_dim         : 3                         # Input dimension for Branch Net

@@ -36,6 +36,7 @@ name_model = 'model_' + param_file_name
 #########################################
 dataname      = config["dataname"]
 split         = config["split"]
+batch_size    = config["batch_size"]
 scaling       = config["scaling"]
 adapt_actfun  = config["adapt_actfun"]
 scheduler     = config["scheduler"]
@@ -181,11 +182,21 @@ if adapt_actfun:
 else:
     predict = predict_vanilla
 
-# Loss = MSE ### change to other losses
-def loss(params, data, u):
+def MSE(params, data, u):
     u_preds = predict(params, data)
     mse = jnp.mean((u_preds.flatten() - u.flatten())**2)
     return mse
+
+def L2(params, data, u): # L2 relative loss
+    u_preds = predict(params, data)
+    l2 = jnp.sum(jnp.linalg.norm(u_preds-u, axis=1) / \
+                             jnp.linalg.norm(u, axis=1))
+    return l2
+
+if Loss=="MSE":
+    loss = MSE
+elif Loss=="L2":
+    loss = L2
 
 # schedule learning rate
 if scheduler == "None":
@@ -209,6 +220,9 @@ if __name__ == '__main__':
     scale_fac, u_train, x_train, v_train, \
     u_test, x_test, v_test = load_dataset(dataname,split,scaling)
     
+    num_batches = len(u_train) // batch_size
+    batched_data = [(v_train[i:i+batch_size], x_train, u_train[i:i+batch_size]) for i in range(0, len(u_train), batch_size)]
+
     layers_f = [u_dim] + inner_layer_b + [G_dim]   # Branch Net
     layers_x = [x_dim] + inner_layer_t + [G_dim]   # Trunk Net
 
@@ -232,22 +246,19 @@ if __name__ == '__main__':
     start_time = time.time()
     opt_state = opt_init(params)
 
-    for epoch in range(epochs):
-        params, opt_state, loss_val = update(params, [v_train, x_train], u_train, opt_state)
-        train_loss.append(loss_val)
-        if epoch % 100 ==0:
-            epoch_time = time.time() - start_time
-            u_train_pred = predict(params, [v_train, x_train])
-            err_train = \
-                  jnp.mean(jnp.linalg.norm(u_train - u_train_pred, 2, axis=1)/\
-                           jnp.linalg.norm(u_train , 2, axis=1))
-            u_test_pred = predict(params, [v_test, x_test])
-            err_test = \
-                    jnp.mean(jnp.linalg.norm(u_test - u_test_pred, 2, axis=1)/\
-                             jnp.linalg.norm(u_test , 2, axis=1))
-            test_loss_val = loss(params, [v_test, x_test], u_test)
-            test_loss.append(test_loss_val)
-            print("Epoch {} | T: {:0.6f} | Train MSE: {:0.3e} | \
-            Test MSE: {:0.3e} | Train L2: {:0.3e} | Test L2: {:0.3e}"\
-            .format(epoch, epoch_time, loss_val, 
-                    test_loss_val, err_train, err_test))
+    for epoch in range(epochs+1):
+        train_loss_batch = []
+        test_loss_batch  = []
+        for batch_idx, (v_batch, x_batch, u_batch) in enumerate(batched_data):
+            params, opt_state, loss_val = update(params, [v_batch, x_batch], u_batch, opt_state)
+            train_loss_batch.append(loss_val)  # train loss for epoch
+
+            if epoch % 100 == 0 and batch_idx == split/batch_size-1:
+                epoch_time = time.time() - start_time
+                err_train = sum(train_loss_batch)/split
+                u_test_pred = predict(params, [v_test, x_test])
+                err_test = loss(params, [v_test, x_test], u_test)/(u_test.shape[0])
+                train_loss.append(err_train)
+                test_loss.append(err_test)
+                print("Epoch {} | T: {:0.6f} | Train {}: {:0.3e} | Test {}: {:0.3e}"\
+                .format(epoch, epoch_time, Loss, err_train, Loss, err_test))
