@@ -1,4 +1,4 @@
-# FNO_HH
+# DNO_HH
 
 Learning Hodgkin-Huxley model with DeepONet
 
