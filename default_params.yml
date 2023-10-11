@@ -1,14 +1,19 @@
 dataname      : "datasetHH_test1.mat"
 split         : 1600
-batch_size    : 50
+batch_size    : 200
 scaling       : "Gaussian"                # Default, Gaussian, or Mixed
+weights_norm  : "Kaiming"                 # Xavier or Kaiming
 adapt_actfun  : True
 scheduler     : "None"                    # None or Exp
 Loss          : "L2"                      # MSE or L2
-epochs        : 10000
+epochs        : 20000
 lr            : 0.001
 u_dim         : 3                         # Input dimension for Branch Net
 x_dim         : 1                         # Input dimension for Trunk Net
 G_dim         : 100                       # Output dimension
 inner_layer_b : [50, 50, 50, 50, 50, 50]  
-inner_layer_t : [50, 50, 50, 50, 50, 50] 
+inner_layer_t : [50, 50, 50, 50, 50, 50]
+#### Plotting and tensorboard
+ep_step       : 200 
+idx           : [7, 42, 93, 158]          # random test sample
+plotting      : False

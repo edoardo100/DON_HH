@@ -10,6 +10,8 @@ from tensorboardX import SummaryWriter
 import os
 import yaml
 import argparse
+# plotting
+import matplotlib.pyplot as plt
 
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with Fourier Neural Operator")
@@ -38,6 +40,7 @@ dataname      = config["dataname"]
 split         = config["split"]
 batch_size    = config["batch_size"]
 scaling       = config["scaling"]
+weights_norm  = config["weights_norm"]
 adapt_actfun  = config["adapt_actfun"]
 scheduler     = config["scheduler"]
 Loss          = config["Loss"]
@@ -48,6 +51,11 @@ x_dim         = config["x_dim"]
 G_dim         = config["G_dim"]
 inner_layer_b = config["inner_layer_b"]
 inner_layer_t = config["inner_layer_t"]
+#### Plotting parameters
+ep_step  = config["ep_step"]
+idx      = config["idx"]
+n_idx    = len(idx)
+plotting = config["plotting"]
 
 #### Functions
 def scale_data(data, min_value, max_value):
@@ -57,7 +65,7 @@ def scale_data(data, min_value, max_value):
     scaled_data = (max_value - min_value) * (data - data_min) / (data_max - data_min) + min_value
     return data_min, data_max, scaled_data
 
-def unscale_data(scaled_data, original_min, original_max):
+def unscale_data(scaled_data, original_max, original_min):
     # Apply the inverse linear transformation
     unscaled_data = (scaled_data - original_min) / (original_max - original_min)
     # Map the unscaled data back to the original range
@@ -95,7 +103,7 @@ def load_dataset(dataname,split,scaling):
         scale_fac = [u_mean,u_std,x_mean,x_std,v_mean1,v_std1,v_mean2,v_std2]
     elif scaling == "Mixed":
         u_mean, u_std, u_data = gaussian_scale(u_data)
-        x_mean, x_std, x_data = scale_data(x_data,0.0,1.0)
+        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
         v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
         v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
         scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
@@ -104,8 +112,24 @@ def load_dataset(dataname,split,scaling):
     u_test, x_test, v_test = u_data[split:], x_data.transpose(), v_data[split:]
     return scale_fac, u_train, x_train, v_train, u_test, x_test, v_test
 
+def load_data_for_plotting(dataname,split):
+    d         = sio.loadmat(dataname)
+    u_data    = jnp.array(d['vs'])
+    x_data    = jnp.array(d['tspan'])
+    v_data1   = jnp.array(d['iapps'])[:,0:2] # pulse times
+    v_data2   = jnp.array(d['iapps'])[:,[2]]   # pulse intensities
+    domain    = jnp.tile(x_data.flatten(),(v_data1.shape[0],x_data.shape[0]))
+    v_data = jnp.where((domain >= v_data1[:,[0]]) & (domain <= v_data1[:,[1]]), 1.0, 0.0)
+    v_data = v_data*v_data2
+    u_test, x_test, v_test = u_data[split:], x_data.transpose(), v_data[split:]
+    return u_test, x_test, v_test
+
 key = random.PRNGKey(1234)
-initializer = jax.nn.initializers.glorot_normal()
+
+if weights_norm == "Xavier":
+    initializer = jax.nn.initializers.glorot_normal()
+elif weights_norm == "Kaiming":
+    initializer = jax.nn.initializers.he_normal()
 
 def hyper_initial(layers,adapt_actfun=True):
     L = len(layers)
@@ -184,14 +208,18 @@ else:
 
 def MSE(params, data, u):
     u_preds = predict(params, data)
-    mse = jnp.mean((u_preds.flatten() - u.flatten())**2)
+    mse = jnp.mean((u_preds - u)**2)
     return mse
 
 def L2(params, data, u): # L2 relative loss
     u_preds = predict(params, data)
-    l2 = jnp.sum(jnp.linalg.norm(u_preds-u, axis=1) / \
-                             jnp.linalg.norm(u, axis=1))
-    return l2
+    num_l2 = jnp.sqrt(jnp.sum((u_preds-u)**2,axis=1))
+    num_l2 = jnp.sum(num_l2)
+    den_l2 = jnp.sqrt(jnp.sum((u)**2,axis=1))
+    den_l2 = jnp.sum(den_l2)
+    #l2 = jnp.sum(jnp.linalg.norm(u_preds-u, axis=1) / \
+    #                         jnp.linalg.norm(u, axis=1))
+    return num_l2/den_l2
 
 if Loss=="MSE":
     loss = MSE
@@ -246,6 +274,9 @@ if __name__ == '__main__':
     start_time = time.time()
     opt_state = opt_init(params)
 
+    # Unscaled dataset (for plotting)
+    u_test_unscaled, x_unscaled, v_test_unscaled = load_data_for_plotting(dataname,split)
+
     for epoch in range(epochs+1):
         train_loss_batch = []
         test_loss_batch  = []
@@ -253,12 +284,86 @@ if __name__ == '__main__':
             params, opt_state, loss_val = update(params, [v_batch, x_batch], u_batch, opt_state)
             train_loss_batch.append(loss_val)  # train loss for epoch
 
-            if epoch % 100 == 0 and batch_idx == split/batch_size-1:
+            if epoch % ep_step == 0 and batch_idx == num_batches-1:
                 epoch_time = time.time() - start_time
-                err_train = sum(train_loss_batch)/split
+                err_train = sum(train_loss_batch)/num_batches
                 u_test_pred = predict(params, [v_test, x_test])
-                err_test = loss(params, [v_test, x_test], u_test)/(u_test.shape[0])
+                err_test = loss(params, [v_test, x_test], u_test)
                 train_loss.append(err_train)
                 test_loss.append(err_test)
                 print("Epoch {} | T: {:0.6f} | Train {}: {:0.3e} | Test {}: {:0.3e}"\
                 .format(epoch, epoch_time, Loss, err_train, Loss, err_test))
+                # Add data to tensorboard
+                writer.add_scalars('DON_HH', {'Train_loss': err_train,
+                                              'Test_loss': err_test}, epoch)
+    
+    #########################################
+    # plot data at every epoch_step
+    #########################################
+        if epoch == 0:
+            #### initial value of v
+            esempio_test = v_test_unscaled[idx, :]
+            esempio_test_pp = v_test[idx, :]
+            
+            X = jnp.linspace(0, 100, esempio_test.shape[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Applied current (I_app)')
+            ax[0].set(ylabel = 'I_app(t)')
+            for i in range(n_idx):
+                ax[i].plot(X, esempio_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].set_ylim([-0.2, 10])
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Applied current (I_app)', fig, 0)
+
+            #### Approximate classical solution
+            soluzione_test = u_test_unscaled[jnp.array(idx)]
+            X = jnp.linspace(0, 100, soluzione_test.shape[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Numerical approximation (V_m)')
+            ax[0].set(ylabel = 'V_m (mV)')
+            for i in range(n_idx):
+                ax[i].plot(X, soluzione_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Numerical approximation (V_m)', fig, 0)
+
+        #### approximate solution with DON of HH model
+        if epoch % ep_step == 0:
+            out_test = predict(params, [esempio_test_pp, x_test])
+            if scaling == "Default":
+                out_test = unscale_data(out_test,scale_fac[1],scale_fac[0])
+            elif scaling == "Gaussian":
+                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+            elif scaling == "Mixed":
+                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('FNO approximation (V_m)')
+            ax[0].set(ylabel = 'V_m (mV)')
+            for i in range(n_idx):
+                ax[i].plot(X, out_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('FNO approximation (V_m)', fig, epoch)
+
+            #### Module of the difference between classical and DON approximation
+            diff = jnp.abs(out_test - soluzione_test)
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Module of the difference')
+            ax[0].set(ylabel = '|V_m(mV)|')
+            for i in range(n_idx):
+                ax[i].plot(X, diff[i])                    
+                ax[i].set(xlabel = 'x')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Module of the difference', fig, epoch)
+    
+    writer.flush() # per salvare i dati finali
+    writer.close() # chiusura writer tensorboard
