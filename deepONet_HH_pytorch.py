@@ -275,6 +275,10 @@ class TripleCartesianProd(Data):
 
     def losses(self, targets, outputs, loss_fn, inputs, model, aux=None):
         return loss_fn(targets, outputs)
+    
+    def loss_fn(y_true, y_pred):
+        return torch.sum(torch.norm(y_true - y_pred, axis=1) / torch.norm(y_true, axis=1))
+
 
     def train_next_batch(self, batch_size=None):
         if batch_size is None:
