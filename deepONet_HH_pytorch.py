@@ -24,29 +24,67 @@ mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_default_device(mydevice) # default tensor device
 torch.set_default_dtype(torch.float32) # default tensor dtype
 
+dataname     = "datasetHH_test1.mat"
+split        = 1600
+scaling      = "Default"
+batch_size   = 100
+input_size_b = 3
+input_size_t = 1
+out_size     = 50
+adapt        = True
+#### Optimizer parameters
+epochs    = 20000
+lr        = 1e-3
+scheduler = "StepLR"
+Loss      = "L2"
+
 #########################################
 # activation functions and initializers
 #########################################
-def layer_wise_locally_adaptive(activation, n=1):
-    """Layer-wise locally adaptive activation functions (L-LAAF).
+class AdaptiveLinear(nn.Linear):
+    """Applies a linear transformation to the input data as follows
+    :math:`y = naxA^T + b`.
+    More details available in Jagtap, A. D. et al. Locally adaptive
+    activation functions with slope recovery for deep and
+    physics-informed neural networks, Proc. R. Soc. 2020.
 
-    References:
-        `A. D. Jagtap, K. Kawaguchi, & G. E. Karniadakis. Locally adaptive activation
-        functions with slope recovery for deep and physics-informed neural networks.
-        Proceedings of the Royal Society A, 476(2239), 20200334, 2020
-        <https://doi.org/10.1098/rspa.2020.0334>`_.
+    Parameters
+    ----------
+    in_features : int
+        The size of each input sample
+    out_features : int 
+        The size of each output sample
+    bias : bool, optional
+        If set to ``False``, the layer will not learn an additive bias
+    adaptive_rate : float, optional
+        Scalable adaptive rate parameter for activation function that
+        is added layer-wise for each neuron separately. It is treated
+        as learnable parameter and will be optimized using a optimizer
+        of choice
+    adaptive_rate_scaler : float, optional
+        Fixed, pre-defined, scaling factor for adaptive activation
+        functions
     """
-    a = nn.parameter.Parameter(torch.tensor(1 / n))
-    return lambda x: activation(n * a * x)
+    def __init__(self, in_features, out_features, bias=True, adaptive_rate=None, adaptive_rate_scaler=None):
+        super(AdaptiveLinear, self).__init__(in_features, out_features, bias)
+        self.adaptive_rate = adaptive_rate
+        self.adaptive_rate_scaler = adaptive_rate_scaler
+        if self.adaptive_rate:
+            self.A = nn.Parameter(self.adaptive_rate * torch.ones(self.in_features))
+            if not self.adaptive_rate_scaler:
+                self.adaptive_rate_scaler = 10.0
+            
+    def forward(self, input):
+        if self.adaptive_rate:
+            return nn.functional.linear(self.adaptive_rate_scaler * self.A * input, self.weight, self.bias)
+        return nn.functional.linear(input, self.weight, self.bias)
 
-def activation(act_fun,adapt_actfun=False):
+def activation(act_fun):
     act_dict = {
         "ReLu" : F.relu,
         "Tanh" : F.tanh,
         "GELU" : F.gelu,
     }
-    if adapt_actfun:
-        return layer_wise_locally_adaptive(act_dict[act_fun],n=10)
     return act_dict[act_fun]
     
 def initializer(initial):
@@ -152,11 +190,14 @@ class FNN(nn.Module):
         self.activation  = activation
         self.initializer = kernel_initializer
         self.linears     = nn.ModuleList()
+        self.adapt_rate  = None
+        if adapt:
+            self.adapt_rate = 0.1
 
         # Assembly the network
         for i in range(1,len(layer_sizes)):
             self.linears.append(
-                nn.Linear(layer_sizes[i-1],layer_sizes[i])
+                AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate)
             )
             # Initialize the parameters
             self.initializer(self.linears[-1].weight)
@@ -198,28 +239,18 @@ class DeepONet(nn.Module):
         # add bias
         out += self.b
         return out
-    
+
+#########################################
+#                 MAIN
+#########################################
 if __name__=="__main__":
-    dataname     = "datasetHH_test1.mat"
-    split        = 1600
-    scaling      = "Default"
-    batch_size   = 100
-    input_size_b = 3
-    input_size_t = 1
-    out_size     = 50
-    adapt        = False
     #### Network parameters
     layers = {"branch" : [input_size_b] + [50,50,50,50] + [out_size],
               "trunk"  : [input_size_t] + [50,50,50,50] + [out_size] }
-    activ  = {"branch" : activation("Tanh",adapt),
-              "trunk"  : activation("Tanh",adapt)}
+    activ  = {"branch" : activation("Tanh"),
+              "trunk"  : activation("Tanh")}
     init   = {"branch" : initializer("Glorot normal"),
               "trunk"  : initializer("Glorot normal")}
-    #### Optimizer parameters
-    epochs    = 20000
-    lr        = 1e-3
-    scheduler = "StepLR"
-    Loss      = "L2"
     #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
     scale_fac, u_train, x_train, v_train, u_test, x_test, v_test = load_dataset(dataname,split,scaling)
 
