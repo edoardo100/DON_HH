@@ -1,218 +1,34 @@
-""" Utilities slightly modified from DeepXDE classes
-CREDITS:
-
-    @article{lu2021deepxde,
-      author  = {Lu, Lu and Meng, Xuhui and Mao, Zhiping and Karniadakis, George Em},
-      title   = {{DeepXDE}: A deep learning library for solving differential equations},
-      journal = {SIAM Review},
-      volume  = {63},
-      number  = {1},
-      pages   = {208-228},
-      year    = {2021},
-      doi     = {10.1137/19M1274067}
-    }
+# -*- coding: utf-8 -*-
 """
-import torch
-import torch.nn.functional as F
-import abc
-import numpy as np
+Learning Hodgkin-Huxley model with DeepONet
+"""
 
+import torch
+from timeit import default_timer
+import torch.nn.functional as F
+import torch.nn as nn
+import scipy.io as sio
+
+#########################################
+# default value
+#########################################
 mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 ## Metal GPU acceleration on Mac OSX
-## NOT WORKING since ComplexFloat is not supported by the MPS backend
+## NOT WORKING since ComplexFloat and Float64 is not supported by the MPS backend
+## It isn't worth to force the conversion since we have cuda machine for test 
 #if torch.backends.mps.is_available():
 #    mydevice = torch.device("mps")
 #    print ("MPS acceleration is enabled")
 #else:
 #    print ("MPS device not found.")
 torch.set_default_device(mydevice) # default tensor device
-torch.set_default_tensor_type(torch.FloatTensor) # default tensor dtype
+torch.set_default_dtype(torch.float32) # default tensor dtype
 
-class BatchSampler:
-    """Samples a mini-batch of indices.
-
-    The indices are repeated indefinitely. Has the same effect as:
-
-    .. code-block:: python
-
-        indices = tf.data.Dataset.range(num_samples)
-        indices = indices.repeat().shuffle(num_samples).batch(batch_size)
-        iterator = iter(indices)
-        batch_indices = iterator.get_next()
-
-    However, ``tf.data.Dataset.__iter__()`` is only supported inside of ``tf.function`` or when eager execution is
-    enabled. ``tf.data.Dataset.make_one_shot_iterator()`` supports graph mode, but is too slow.
-
-    This class is not implemented as a Python Iterator, so that it can support dynamic batch size.
-
-    Args:
-        num_samples (int): The number of samples.
-        shuffle (bool): Set to ``True`` to have the indices reshuffled at every epoch.
-    """
-
-    def __init__(self, num_samples, shuffle=True):
-        self.num_samples = num_samples
-        self.shuffle = shuffle
-
-        self._indices = np.arange(self.num_samples)
-        self._epochs_completed = 0
-        self._index_in_epoch = 0
-
-        # Shuffle for the first epoch
-        if shuffle:
-            np.random.shuffle(self._indices)
-
-    @property
-    def epochs_completed(self):
-        return self._epochs_completed
-
-    def get_next(self, batch_size):
-        """Returns the indices of the next batch.
-
-        Args:
-            batch_size (int): The number of elements to combine in a single batch.
-        """
-        if batch_size > self.num_samples:
-            raise ValueError(
-                "batch_size={} is larger than num_samples={}.".format(
-                    batch_size, self.num_samples
-                )
-            )
-
-        start = self._index_in_epoch
-        if start + batch_size <= self.num_samples:
-            self._index_in_epoch += batch_size
-            end = self._index_in_epoch
-            return self._indices[start:end]
-        else:
-            # Finished epoch
-            self._epochs_completed += 1
-            # Get the rest examples in this epoch
-            rest_num_samples = self.num_samples - start
-            indices_rest_part = np.copy(
-                self._indices[start : self.num_samples]
-            )  # self._indices will be shuffled below.
-            # Shuffle the indices
-            if self.shuffle:
-                np.random.shuffle(self._indices)
-            # Start next epoch
-            start = 0
-            self._index_in_epoch = batch_size - rest_num_samples
-            end = self._index_in_epoch
-            indices_new_part = self._indices[start:end]
-            return np.hstack((indices_rest_part, indices_new_part))
-
-class Data(abc.ABC):
-    """Data base class."""
-
-    def losses(self, targets, outputs, loss_fn, inputs, model, aux=None):
-        """Return a list of losses, i.e., constraints."""
-        raise NotImplementedError("Data.losses is not implemented.")
-
-    def losses_train(self, targets, outputs, loss_fn, inputs, model, aux=None):
-        """Return a list of losses for training dataset, i.e., constraints."""
-        return self.losses(targets, outputs, loss_fn, inputs, model, aux=aux)
-
-    def losses_test(self, targets, outputs, loss_fn, inputs, model, aux=None):
-        """Return a list of losses for test dataset, i.e., constraints."""
-        return self.losses(targets, outputs, loss_fn, inputs, model, aux=aux)
-
-    @abc.abstractmethod
-    def train_next_batch(self, batch_size=None):
-        """Return a training dataset of the size `batch_size`."""
-
-    @abc.abstractmethod
-    def test(self):
-        """Return a test dataset."""
-
-
-######### NN-related classes
-class NN(torch.nn.Module):
-    """Base class for all neural network modules."""
-
-    def __init__(self):
-        super().__init__()
-        self.regularizer = None
-        self._auxiliary_vars = None
-        self._input_transform = None
-        self._output_transform = None
-
-    @property
-    def auxiliary_vars(self):
-        """Tensors: Any additional variables needed."""
-        return self._auxiliary_vars
-
-    @auxiliary_vars.setter
-    def auxiliary_vars(self, value):
-        self._auxiliary_vars = value
-
-    def apply_feature_transform(self, transform):
-        """Compute the features by appling a transform to the network inputs, i.e.,
-        features = transform(inputs). Then, outputs = network(features).
-        """
-        self._input_transform = transform
-
-    def apply_output_transform(self, transform):
-        """Apply a transform to the network outputs, i.e.,
-        outputs = transform(inputs, outputs).
-        """
-        self._output_transform = transform
-
-    def num_trainable_parameters(self):
-        """Evaluate the number of trainable parameters for the NN."""
-        return sum(v.numel() for v in self.parameters() if v.requires_grad)
-
-class FNN(NN):
-    """Fully-connected neural network."""
-
-    def __init__(self, layer_sizes, activation, kernel_initializer):
-        super().__init__()
-        if isinstance(activation, list):
-            if not (len(layer_sizes) - 1) == len(activation):
-                raise ValueError(
-                    "Total number of activation functions do not match with sum of hidden layers and output layer!"
-                )
-            self.activation = list(map(activations, activation))
-        else:
-            self.activation = activations(activation)
-        initializer = initializers(kernel_initializer)
-        initializer_zero = initializers("zeros")
-
-        self.linears = torch.nn.ModuleList()
-        for i in range(1, len(layer_sizes)):
-            self.linears.append(
-                torch.nn.Linear(layer_sizes[i - 1], layer_sizes[i])
-            )
-            initializer(self.linears[-1].weight)
-            initializer_zero(self.linears[-1].bias)
-
-    def forward(self, inputs):
-        x = inputs
-        if self._input_transform is not None:
-            x = self._input_transform(x)
-        for j, linear in enumerate(self.linears[:-1]):
-            x = (
-                self.activation[j](linear(x))
-                if isinstance(self.activation, list)
-                else self.activation(linear(x))
-            )
-        x = self.linears[-1](x)
-        if self._output_transform is not None:
-            x = self._output_transform(inputs, x)
-        return x
-
-######### Activation functions and initializers
+#########################################
+# activation functions and initializers
+#########################################
 def layer_wise_locally_adaptive(activation, n=1):
     """Layer-wise locally adaptive activation functions (L-LAAF).
-
-    Examples:
-
-    To define a L-LAAF ReLU with the scaling factor ``n = 10``:
-
-    .. code-block:: python
-
-        n = 10
-        activation = f"LAAF-{n} relu"  # "LAAF-10 relu"
 
     References:
         `A. D. Jagtap, K. Kawaguchi, & G. E. Karniadakis. Locally adaptive activation
@@ -220,19 +36,20 @@ def layer_wise_locally_adaptive(activation, n=1):
         Proceedings of the Royal Society A, 476(2239), 20200334, 2020
         <https://doi.org/10.1098/rspa.2020.0334>`_.
     """
-    a = torch.nn.parameter.Parameter(torch.Tensor(1 / n))
+    a = nn.parameter.Parameter(torch.tensor(1 / n))
     return lambda x: activation(n * a * x)
 
-def activations(act_fun,adapt_actfun=False):
+def activation(act_fun,adapt_actfun=False):
     act_dict = {
         "ReLu" : F.relu,
-        "tanh" : F.tanh,
+        "Tanh" : F.tanh,
+        "GELU" : F.gelu,
     }
     if adapt_actfun:
         return layer_wise_locally_adaptive(act_dict[act_fun],n=10)
     return act_dict[act_fun]
     
-def initializers(initial):
+def initializer(initial):
     initial_dict = {
         "Glorot normal": torch.nn.init.xavier_normal_,
         "Glorot uniform": torch.nn.init.xavier_uniform_,
@@ -242,118 +59,248 @@ def initializers(initial):
     }
     return initial_dict[initial]
 
-######### DeepONet-related classes
+#########################################
+# reading and scaling data
+#########################################
+def scale_data(data, min_value, max_value):
+    data_min = torch.min(data)
+    data_max = torch.max(data)
+    # Apply the linear transformation
+    scaled_data = (max_value - min_value) * (data - data_min) / (data_max - data_min) + min_value
+    return data_min, data_max, scaled_data
 
-class TripleCartesianProd(Data):
-    """Dataset with each data point as a triple. The ordered pair of the first two
-    elements are created from a Cartesian product of the first two lists. If we compute
-    the Cartesian product of the first two arrays, then we have a ``Triple`` dataset.
+def unscale_data(scaled_data, original_max, original_min):
+    # Apply the inverse linear transformation
+    unscaled_data = (scaled_data - original_min) / (original_max - original_min)
+    # Map the unscaled data back to the original range
+    unscaled_data = unscaled_data * (original_max - original_min) + original_min
+    return unscaled_data
 
-    This dataset can be used with the network ``DeepONetCartesianProd`` for operator
-    learning.
+def gaussian_scale(data):
+    mean = torch.mean(data)
+    std_dev = torch.std(data)
+    scaled_data = (data - mean) / std_dev
+    return mean, std_dev, scaled_data
 
-    Args:
-        X_train: A tuple of two NumPy arrays. The first element has the shape (`N1`,
-            `dim1`), and the second element has the shape (`N2`, `dim2`).
-        y_train: A NumPy array of shape (`N1`, `N2`).
-    """
+def inverse_gaussian_scale(scaled_data, original_mean, original_std_dev): 
+    unscaled_data = scaled_data * original_std_dev + original_mean
+    return unscaled_data
 
-    def __init__(self, X_train, y_train, X_test, y_test):
-        if len(X_train[0]) * len(X_train[1]) != y_train.size:
-            raise ValueError(
-                "The training dataset does not have the format of Cartesian product."
-            )
-        if len(X_test[0]) * len(X_test[1]) != y_test.size:
-            raise ValueError(
-                "The testing dataset does not have the format of Cartesian product."
-            )
-        self.train_x, self.train_y = X_train, y_train
-        self.test_x, self.test_y = X_test, y_test
+def load_dataset(dataname,split,scaling):
+    d         = sio.loadmat(dataname)
+    u_data    = torch.tensor(d['vs']).float()
+    x_data    = torch.tensor(d['tspan']).float()
+    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
+    v_data2   = (torch.tensor(d['iapps'])[:,2]).float()   # pulse intensities
+    scale_fac = []
+    if scaling == "Default":
+        u_max, u_min, u_data = scale_data(u_data,0.0,1.0)
+        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
+        v_max1, v_min1, v_data1 = scale_data(v_data1,0.0,1.0)
+        v_max2, v_min2, v_data2 = scale_data(v_data2,0.0,1.0)
+        scale_fac = [u_max,u_min,x_max,x_min,v_max1,v_min1,v_max2,v_min2]
+    elif scaling == "Gaussian":
+        u_mean, u_std, u_data = gaussian_scale(u_data)
+        x_mean, x_std, x_data = gaussian_scale(x_data)
+        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
+        scale_fac = [u_mean,u_std,x_mean,x_std,v_mean1,v_std1,v_mean2,v_std2]
+    elif scaling == "Mixed":
+        u_mean, u_std, u_data = gaussian_scale(u_data)
+        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
+        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
+        scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
+    v_data = torch.cat((v_data1,v_data2.reshape(-1,1)),axis=1)
+    u_train, x_train, v_train = u_data[:split], x_data.t(), v_data[:split]
+    u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
+    return scale_fac, u_train, x_train, v_train, u_test, x_test, v_test
 
-        self.branch_sampler = BatchSampler(len(X_train[0]), shuffle=True)
-        self.trunk_sampler = BatchSampler(len(X_train[1]), shuffle=True)
-
-    def losses(self, targets, outputs, loss_fn, inputs, model, aux=None):
-        return loss_fn(targets, outputs)
+def load_data_for_plotting(dataname,split):
+    d         = sio.loadmat(dataname)
+    u_data    = torch.tensor(d['vs']).float()
+    x_data    = torch.tensor(d['tspan']).float()
+    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
+    v_data2   = (torch.tensor(d['iapps'])[:,2]).float()   # pulse intensities
+    domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
+    v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
+    v_data = v_data*v_data2
+    u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
+    return u_test, x_test, v_test
+#########################################
+# loss function
+#########################################
+class L2relLoss():
+    """ sum of relative L^2 error """        
+    def rel(self, x, y):
+        num_examples = x.size()[0]
+        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
+        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
+        
+        return torch.sum(diff_norms/y_norms)
     
-    def loss_fn(y_true, y_pred):
-        return torch.sum(torch.norm(y_true - y_pred, axis=1) / torch.norm(y_true, axis=1))
+    def __call__(self, x, y):
+        return self.rel(x, y)
 
-
-    def train_next_batch(self, batch_size=None):
-        if batch_size is None:
-            return self.train_x, self.train_y
-        if not isinstance(batch_size, (tuple, list)):
-            indices = self.branch_sampler.get_next(batch_size)
-            return (self.train_x[0][indices], self.train_x[1]), self.train_y[indices]
-        indices_branch = self.branch_sampler.get_next(batch_size[0])
-        indices_trunk = self.trunk_sampler.get_next(batch_size[1])
-        return (
-            self.train_x[0][indices_branch],
-            self.train_x[1][indices_trunk],
-        ), self.train_y[indices_branch, indices_trunk]
-
-    def test(self):
-        return self.test_x, self.test_y
-    
-class DeepONetCartesianProd(NN):
-    """Deep operator network for dataset in the format of Cartesian product.
-
-    Args:
-        layer_sizes_branch: A list of integers as the width of a fully connected network,
-            or `(dim, f)` where `dim` is the input dimension and `f` is a network
-            function. The width of the last layer in the branch and trunk net should be
-            equal.
-        layer_sizes_trunk (list): A list of integers as the width of a fully connected
-            network.
-        activation: If `activation` is a ``string``, then the same activation is used in
-            both trunk and branch nets. If `activation` is a ``dict``, then the trunk
-            net uses the activation `activation["trunk"]`, and the branch net uses
-            `activation["branch"]`.
-    """
-
-    def __init__(
-        self,
-        layer_sizes_branch,
-        layer_sizes_trunk,
-        activation,
-        kernel_initializer,
-        regularization=None,
-    ):
+#########################################
+# FNN class
+#########################################  
+class FNN(nn.Module):
+    def __init__(self, layer_sizes, activation, kernel_initializer):
         super().__init__()
-        if isinstance(activation, dict):
-            activation_branch = activations(activation["branch"])
-            self.activation_trunk = activations(activation["trunk"])
-        else:
-            activation_branch = self.activation_trunk = activations(activation)
-        if callable(layer_sizes_branch[1]):
-            # User-defined network
-            self.branch = layer_sizes_branch[1]
-        else:
-            # Fully connected network
-            self.branch = FNN(layer_sizes_branch, activation_branch, kernel_initializer)
-        self.trunk = FNN(layer_sizes_trunk, self.activation_trunk, kernel_initializer)
-        self.b = torch.nn.parameter.Parameter(torch.tensor(0.0))
-        self.regularizer = regularization
+        self.layers      = layer_sizes
+        self.activation  = activation
+        self.initializer = kernel_initializer
+        self.linears     = nn.ModuleList()
 
-    def forward(self, inputs):
-        x_func = inputs[0]
-        x_loc = inputs[1]
-        # Branch net to encode the input function
-        x_func = self.branch(x_func)
-        # Trunk net to encode the domain of the output function
-        if self._input_transform is not None:
-            x_loc = self._input_transform(x_loc)
-        x_loc = self.activation_trunk(self.trunk(x_loc))
-        # Dot product
-        if x_func.shape[-1] != x_loc.shape[-1]:
-            raise AssertionError(
-                "Output sizes of branch net and trunk net do not match."
+        # Assembly the network
+        for i in range(1,len(layer_sizes)):
+            self.linears.append(
+                nn.Linear(layer_sizes[i-1],layer_sizes[i])
             )
-        x = torch.einsum("bi,ni->bn", x_func, x_loc)
-        # Add bias
-        x += self.b
-
-        if self._output_transform is not None:
-            x = self._output_transform(inputs, x)
+            # Initialize the parameters
+            self.initializer(self.linears[-1].weight)
+            # Initialize bias to zero
+            initializer("zeros")(self.linears[-1].bias) 
+    
+    def forward(self,x):
+        for linear in self.linears[:-1]:
+            x = self.activation(linear(x))
+        x = self.linears[-1](x)
         return x
+
+#########################################
+# DeepONet class
+#########################################  
+class DeepONet(nn.Module):
+    def __init__(self, layers, activation, kernel_initializer):
+        """ parameters are dictionaries """
+        super().__init__()
+        self.layer_b = layers["branch"]
+        self.layer_t = layers["trunk"]
+        self.act_b   = activation["branch"]
+        self.act_t   = activation["trunk"]
+        self.init_b  = kernel_initializer["branch"]
+        self.init_t  = kernel_initializer["trunk"]
+        self.branch  = FNN(self.layer_b,self.act_b,self.init_b)
+        self.trunk   = FNN(self.layer_t,self.act_t,self.init_t)
+        # Final bias
+        self.b       = nn.parameter.Parameter(torch.tensor(0.0))
+
+    def forward(self,x):
+        b_in = x[0]
+        t_in = x[1]
+        b_in = self.branch(b_in)
+        # Notice that in trunk we apply the activation
+        # also to the last layer
+        t_in = self.act_t(self.trunk(t_in))
+        out = torch.einsum("ij,kj->ik",b_in,t_in) # check with dataset
+        # add bias
+        out += self.b
+        return out
+    
+if __name__=="__main__":
+    dataname     = "datasetHH_test1.mat"
+    split        = 1600
+    scaling      = "Default"
+    batch_size   = 100
+    input_size_b = 3
+    input_size_t = 1
+    out_size     = 50
+    adapt        = False
+    #### Network parameters
+    layers = {"branch" : [input_size_b] + [50,50,50,50] + [out_size],
+              "trunk"  : [input_size_t] + [50,50,50,50] + [out_size] }
+    activ  = {"branch" : activation("Tanh",adapt),
+              "trunk"  : activation("Tanh",adapt)}
+    init   = {"branch" : initializer("Glorot normal"),
+              "trunk"  : initializer("Glorot normal")}
+    #### Optimizer parameters
+    epochs    = 20000
+    lr        = 1e-3
+    scheduler = "StepLR"
+    Loss      = "L2"
+    #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
+    scale_fac, u_train, x_train, v_train, u_test, x_test, v_test = load_dataset(dataname,split,scaling)
+
+    # batch loader
+    train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
+                                                batch_size = batch_size)
+    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
+                                              batch_size = batch_size) 
+    
+    model = DeepONet(layers,activ,init)
+
+    # Count the parameters
+    par_tot = sum(p.numel() for p in model.parameters())
+    print("Total DeepONet parameters: ", par_tot)
+
+    # Adam optimizer
+    optimizer = torch.optim.Adam(model.parameters(), lr = lr, weight_decay = 1e-4)
+    # lr policy
+    if scheduler == "StepLR":
+        # halved the learning rate every 100 epochs
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 10000, gamma = 0.5)
+    if scheduler == "CosineAnnealingLR":
+        # Cosine Annealing Scheduler (SGD with warm restart)
+        iterations = epochs*(split//batch_size)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = iterations)
+
+    # Loss function
+    if Loss == "L2":
+        myloss = L2relLoss()
+    #elif Loss == 'H1':
+    #    myloss = H1relLoss()
+    t1 = default_timer()
+    # Training process
+    for ep in range(epochs+1):
+        #### One epoch of training
+        model.train()
+        train_loss = 0
+        for v, u in train_loader:
+            v, u = v.to(mydevice), u.to(mydevice)
+            
+            optimizer.zero_grad() # annealing the gradient
+            
+            out = model.forward((v,x_train)) # compute the output
+            
+            # compute the loss
+            if Loss == 'L2':
+                loss = myloss(out.view(batch_size, -1), u.view(batch_size, -1))
+            elif Loss == 'H1':
+                loss = myloss(out, u)
+                
+            loss.backward() # automatic back propagation
+            optimizer.step()
+            if scheduler == "CosineAnnealingLR":
+                scheduler.step()
+                
+            train_loss += loss.item() # update the loss function
+            
+        if scheduler == "StepLR":
+            scheduler.step()
+        
+        #### Evaluate the model on the test set
+        model.eval()
+        test_l2 = 0.0
+        #test_h1 = 0.0
+        with torch.no_grad():
+            for v, u in test_loader:
+                v, u = v.to(mydevice), u.to(mydevice)
+    
+                out = model.forward((v,x_test))      
+                test_l2 += L2relLoss()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
+                #test_h1 += H1relLoss()(out, u).item()
+                
+        train_loss /= split
+        test_l2 /= u_test.shape[0]
+        #test_h1 /= u_test.shape[0]
+    
+        t2 = default_timer()
+        if ep%100==0:
+            print('Epoch:', ep,
+                  'Time:', t2-t1,
+                  'Train_loss:', train_loss,
+                  'Test_loss_l2:', test_l2, 
+                  #'Test_loss_h1:', test_h1
+                  )
