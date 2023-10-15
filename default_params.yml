@@ -1,10 +1,12 @@
+#### Dataset parameters
 dataname      : "datasetHH_test1.mat"
 split         : 1600
-batch_size    : 200
-scaling       : "Gaussian"                # Default, Gaussian, or Mixed
-weights_norm  : "Kaiming"                 # Xavier or Kaiming
+batch_size    : 100
+#### Architecture parameters
+scaling       : "Default"                # Default, Gaussian, or Mixed
+weights_norm  : "Xavier"                  # Xavier or Kaiming
 adapt_actfun  : True
-scheduler     : "None"                    # None or Exp
+scheduler     : "StepLR"
 Loss          : "L2"                      # MSE or L2
 epochs        : 20000
 lr            : 0.001
@@ -13,6 +15,10 @@ x_dim         : 1                         # Input dimension for Trunk Net
 G_dim         : 100                       # Output dimension
 inner_layer_b : [50, 50, 50, 50, 50, 50]  
 inner_layer_t : [50, 50, 50, 50, 50, 50]
+activation_b  : "Tanh"
+activation_t  : "Sin"
+initial_b     : "Glorot normal"
+initial_t     : "Glorot normal"
 #### Plotting and tensorboard
 ep_step       : 200 
 idx           : [7, 42, 93, 158]          # random test sample

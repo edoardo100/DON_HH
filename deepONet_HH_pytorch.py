@@ -8,6 +8,10 @@ from timeit import default_timer
 import torch.nn.functional as F
 import torch.nn as nn
 import scipy.io as sio
+# for test launcher interface
+import os
+import yaml
+import argparse
 
 #########################################
 # default value
@@ -24,19 +28,57 @@ mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_default_device(mydevice) # default tensor device
 torch.set_default_dtype(torch.float32) # default tensor dtype
 
-dataname     = "datasetHH_test1.mat"
-split        = 1600
-scaling      = "Default"
-batch_size   = 100
-input_size_b = 3
-input_size_t = 1
-out_size     = 50
-adapt        = True
-#### Optimizer parameters
-epochs    = 20000
-lr        = 1e-3
-scheduler = "StepLR"
-Loss      = "L2"
+
+# plotting
+import matplotlib.pyplot as plt
+
+# Define command-line arguments
+parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with Fourier Neural Operator")
+parser.add_argument("--config_file", type=str, default="default_params.yml", help="Path to the YAML configuration file")
+args = parser.parse_args()
+
+# Read the configuration from the specified YAML file
+with open(args.config_file, "r") as config_file:
+    config = yaml.safe_load(config_file)
+
+param_file_name = os.path.splitext(args.config_file)[0]
+
+# Now, `param_file_name` contains the name without the .json suffix
+print("Test name:", param_file_name)
+
+#########################################
+# files names to be saved
+#########################################
+name_log_dir = 'exp_' + param_file_name
+name_model = 'model_' + param_file_name 
+
+#########################################
+# DeepONet's hyperparameter
+#########################################
+dataname      = config["dataname"]
+split         = config["split"]
+batch_size    = config["batch_size"]
+scaling       = config["scaling"]
+weights_norm  = config["weights_norm"]
+adapt_actfun  = config["adapt_actfun"]
+scheduler     = config["scheduler"]
+Loss          = config["Loss"]
+epochs        = config["epochs"]
+lr            = config["lr"]
+u_dim         = config["u_dim"]
+x_dim         = config["x_dim"]
+G_dim         = config["G_dim"]
+inner_layer_b = config["inner_layer_b"]
+inner_layer_t = config["inner_layer_t"]
+activation_b  = config["activation_b"]
+activation_t  = config["activation_t"]
+initial_b     = config["initial_b"]
+initial_t     = config["initial_t"]
+#### Plotting parameters
+ep_step  = config["ep_step"]
+idx      = config["idx"]
+n_idx    = len(idx)
+plotting = config["plotting"]
 
 #########################################
 # activation functions and initializers
@@ -81,9 +123,11 @@ class AdaptiveLinear(nn.Linear):
 
 def activation(act_fun):
     act_dict = {
-        "ReLu" : F.relu,
-        "Tanh" : F.tanh,
-        "GELU" : F.gelu,
+        "ReLu"     : F.relu,
+        "Tanh"     : F.tanh,
+        "GELU"     : F.gelu,
+        "Sigmoid"  : F.sigmoid,
+        "Sin"      : torch.sin,
     }
     return act_dict[act_fun]
     
@@ -191,7 +235,7 @@ class FNN(nn.Module):
         self.initializer = kernel_initializer
         self.linears     = nn.ModuleList()
         self.adapt_rate  = None
-        if adapt:
+        if adapt_actfun:
             self.adapt_rate = 0.1
 
         # Assembly the network
@@ -245,12 +289,12 @@ class DeepONet(nn.Module):
 #########################################
 if __name__=="__main__":
     #### Network parameters
-    layers = {"branch" : [input_size_b] + [50,50,50,50] + [out_size],
-              "trunk"  : [input_size_t] + [50,50,50,50] + [out_size] }
-    activ  = {"branch" : activation("Tanh"),
-              "trunk"  : activation("Tanh")}
-    init   = {"branch" : initializer("Glorot normal"),
-              "trunk"  : initializer("Glorot normal")}
+    layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
+              "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
+    activ  = {"branch" : activation(activation_b),
+              "trunk"  : activation(activation_t)}
+    init   = {"branch" : initializer(initial_b),
+              "trunk"  : initializer(initial_t)}
     #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
     scale_fac, u_train, x_train, v_train, u_test, x_test, v_test = load_dataset(dataname,split,scaling)
 
@@ -329,9 +373,7 @@ if __name__=="__main__":
     
         t2 = default_timer()
         if ep%100==0:
-            print('Epoch:', ep,
-                  'Time:', t2-t1,
-                  'Train_loss:', train_loss,
-                  'Test_loss_l2:', test_l2, 
+            print('Epoch:', ep, 'Time:', t2-t1,
+                  'Train_loss:', train_loss, 'Test_loss_l2:', test_l2, 
                   #'Test_loss_h1:', test_h1
                   )
