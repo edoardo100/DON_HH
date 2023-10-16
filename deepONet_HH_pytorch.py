@@ -12,6 +12,10 @@ import scipy.io as sio
 import os
 import yaml
 import argparse
+# tensorboard and plotting
+from tensorboardX import SummaryWriter
+import matplotlib.pyplot as plt
+import numpy as np
 
 #########################################
 # default value
@@ -33,7 +37,7 @@ torch.set_default_dtype(torch.float32) # default tensor dtype
 import matplotlib.pyplot as plt
 
 # Define command-line arguments
-parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with Fourier Neural Operator")
+parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
 parser.add_argument("--config_file", type=str, default="default_params.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
@@ -203,7 +207,7 @@ def load_data_for_plotting(dataname,split):
     u_data    = torch.tensor(d['vs']).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
-    v_data2   = (torch.tensor(d['iapps'])[:,2]).float()   # pulse intensities
+    v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
     domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
     v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
     v_data = v_data*v_data2
@@ -288,6 +292,9 @@ class DeepONet(nn.Module):
 #                 MAIN
 #########################################
 if __name__=="__main__":
+
+    writer = SummaryWriter(log_dir = name_log_dir )
+    
     #### Network parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
               "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
@@ -309,6 +316,7 @@ if __name__=="__main__":
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
     print("Total DeepONet parameters: ", par_tot)
+    writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
     # Adam optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr = lr, weight_decay = 1e-4)
@@ -327,6 +335,8 @@ if __name__=="__main__":
     #elif Loss == 'H1':
     #    myloss = H1relLoss()
     t1 = default_timer()
+    # Unscaled dataset (for plotting)
+    u_test_unscaled, x_unscaled, v_test_unscaled = load_data_for_plotting(dataname,split)
     # Training process
     for ep in range(epochs+1):
         #### One epoch of training
@@ -377,3 +387,81 @@ if __name__=="__main__":
                   'Train_loss:', train_loss, 'Test_loss_l2:', test_l2, 
                   #'Test_loss_h1:', test_h1
                   )
+
+            writer.add_scalars('DON_HH', {'Train_loss': train_loss,
+                                                    'Test_loss_l2': test_l2,
+                                                    #'Test_loss_h1': test_h1
+                                                     }, ep)
+    #########################################
+    # plot data at every epoch_step
+    #########################################
+        if ep == 0:
+            #### initial value of v
+            esempio_test = v_test_unscaled[idx, :].to('cpu')
+            esempio_test_pp = v_test[idx, :].to('cpu')
+            
+            X = np.linspace(0, 100, esempio_test.shape[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Applied current (I_app)')
+            ax[0].set(ylabel = 'I_app(t)')
+            for i in range(n_idx):
+                ax[i].plot(X, esempio_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].set_ylim([-0.2, 10])
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Applied current (I_app)', fig, 0)
+
+            #### Approximate classical solution
+            soluzione_test = u_test_unscaled[np.array(idx)]
+            X = np.linspace(0, 100, soluzione_test.shape[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Numerical approximation (V_m)')
+            ax[0].set(ylabel = 'V_m (mV)')
+            for i in range(n_idx):
+                ax[i].plot(X, soluzione_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Numerical approximation (V_m)', fig, 0)
+
+        #### approximate solution with DON of HH model
+        if ep % ep_step == 0:
+            with torch.no_grad():  # no grad for effeciency reason
+                    out_test = model((esempio_test_pp,x_test))
+                    out_test = out_test.to('cpu')
+            if scaling == "Default":
+                out_test = unscale_data(out_test,scale_fac[1],scale_fac[0])
+            elif scaling == "Gaussian":
+                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+            elif scaling == "Mixed":
+                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('DON approximation (V_m)')
+            ax[0].set(ylabel = 'V_m (mV)')
+            for i in range(n_idx):
+                ax[i].plot(X, out_test[i])
+                ax[i].set(xlabel = 't')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('DON approximation (V_m)', fig, ep)
+
+            #### Module of the difference between classical and DON approximation
+            diff = np.abs(out_test - soluzione_test)
+            fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
+            fig.suptitle('Module of the difference')
+            ax[0].set(ylabel = '|V_m(mV)|')
+            for i in range(n_idx):
+                ax[i].plot(X, diff[i])                    
+                ax[i].set(xlabel = 'x')
+                ax[i].grid()
+            if plotting:
+                plt.show()
+            writer.add_figure('Module of the difference', fig, ep)
+
+    writer.flush() # per salvare i dati finali
+    writer.close() # chiusura writer tensorboard
+    torch.save(model, name_model)
