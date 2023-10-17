@@ -8,15 +8,15 @@ weights_norm  : "Xavier"                  # Xavier or Kaiming
 adapt_actfun  : True
 scheduler     : "StepLR"
 Loss          : "L2"                      # MSE or L2
-epochs        : 20000
+epochs        : 1000
 lr            : 0.001
 u_dim         : 3                         # Input dimension for Branch Net
 x_dim         : 1                         # Input dimension for Trunk Net
-G_dim         : 100                       # Output dimension
+G_dim         : 50                       # Output dimension
 inner_layer_b : [50, 50, 50, 50, 50, 50]  
 inner_layer_t : [50, 50, 50, 50, 50, 50]
 activation_b  : "Tanh"
-activation_t  : "Sin"
+activation_t  : "Tanh"
 initial_b     : "Glorot normal"
 initial_t     : "Glorot normal"
 #### FNO parameters
@@ -27,6 +27,6 @@ L             : 4
 d_v           : 32
 modes         : 16
 #### Plotting and tensorboard
-ep_step       : 200 
+ep_step       : 20 
 idx           : [7, 42, 93, 158]          # random test sample
 plotting      : False

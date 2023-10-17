@@ -310,7 +310,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         x = self.mlp1(x) # affine transformation
-        x = activation(x,self.activation) # activation function
+        x = activation(self.activation)(x) # activation function
         x = self.mlp2(x) # affine transformation
         return x
 
@@ -645,7 +645,7 @@ if __name__=="__main__":
             fig.suptitle('Numerical approximation (V_m)')
             ax[0].set(ylabel = 'V_m (mV)')
             for i in range(n_idx):
-                ax[i].plot(X, soluzione_test[i])
+                ax[i].plot(X, soluzione_test[i].to("cpu"))
                 ax[i].set(xlabel = 't')
                 ax[i].grid()
             if plotting:
@@ -655,19 +655,19 @@ if __name__=="__main__":
         #### approximate solution with DON of HH model
         if ep % ep_step == 0:
             with torch.no_grad():  # no grad for effeciency reason
-                    out_test = model((esempio_test_pp,x_test))
+                    out_test = model((esempio_test_pp.to(mydevice),x_test.to(mydevice)))
                     out_test = out_test.to('cpu')
             if scaling == "Default":
-                out_test = unscale_data(out_test,scale_fac[1],scale_fac[0])
+                out_test = unscale_data(out_test.to(mydevice),scale_fac[1],scale_fac[0])
             elif scaling == "Gaussian":
-                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+                out_test = inverse_gaussian_scale(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             elif scaling == "Mixed":
-                out_test = inverse_gaussian_scale(out_test,scale_fac[0],scale_fac[1])
+                out_test = inverse_gaussian_scale(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
             fig.suptitle('DON approximation (V_m)')
             ax[0].set(ylabel = 'V_m (mV)')
             for i in range(n_idx):
-                ax[i].plot(X, out_test[i])
+                ax[i].plot(X, out_test[i].to('cpu'))
                 ax[i].set(xlabel = 't')
                 ax[i].grid()
             if plotting:
@@ -675,7 +675,7 @@ if __name__=="__main__":
             writer.add_figure('DON approximation (V_m)', fig, ep)
 
             #### Module of the difference between classical and DON approximation
-            diff = np.abs(out_test - soluzione_test)
+            diff = np.abs(out_test.to('cpu') - soluzione_test.to('cpu'))
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
             fig.suptitle('Module of the difference')
             ax[0].set(ylabel = '|V_m(mV)|')
