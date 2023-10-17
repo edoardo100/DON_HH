@@ -13,8 +13,8 @@ lr            : 0.001
 u_dim         : 3                         # Input dimension for Branch Net
 x_dim         : 1                         # Input dimension for Trunk Net
 G_dim         : 50                       # Output dimension
-inner_layer_b : [50, 50, 50, 50, 50, 50]  
-inner_layer_t : [50, 50, 50, 50, 50, 50]
+inner_layer_b : [50]  
+inner_layer_t : [50]
 activation_b  : "Tanh"
 activation_t  : "Tanh"
 initial_b     : "Glorot normal"
@@ -24,8 +24,8 @@ fun_actFNO    : "ReLu"
 scalar        : "Real"
 arc           : "Classic"
 L             : 4
-d_v           : 32
-modes         : 16
+d_v           : 1
+modes         : 32
 #### Plotting and tensorboard
 ep_step       : 20 
 idx           : [7, 42, 93, 158]          # random test sample

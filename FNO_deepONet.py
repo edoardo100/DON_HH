@@ -270,20 +270,23 @@ class FNN(nn.Module):
 #########################################
 #          DeepONet CLASSES
 #########################################  
-class DeepONet(nn.Module):
-    def __init__(self, layers, activation, kernel_initializer):
+class DeepONetLinear(nn.Module):
+    def __init__(self, layers, kernel_initializer):
         """ parameters are dictionaries """
         super().__init__()
         self.layer_b = layers["branch"]
         self.layer_t = layers["trunk"]
-        self.act_b   = activation["branch"]
-        self.act_t   = activation["trunk"]
         self.init_b  = kernel_initializer["branch"]
         self.init_t  = kernel_initializer["trunk"]
-        self.branch  = FNN(self.layer_b,self.act_b,self.init_b)
-        self.trunk   = FNN(self.layer_t,self.act_t,self.init_t)
-        # Final bias
-        self.b       = nn.parameter.Parameter(torch.tensor(0.0))
+        # we begin with Linear architecture: shallow single layer
+        self.branch  = nn.Linear(self.layer_b[0],self.layer_b[1])
+        self.trunk   = nn.Linear(self.layer_t[0],self.layer_t[1])
+        # Initialize the parameters
+        self.init_b(self.branch.weight)
+        self.init_t(self.trunk.weight)
+        # Initialize bias to zero
+        initializer("zeros")(self.branch.bias) 
+        initializer("zeros")(self.trunk.bias)
 
     def forward(self,x):
         b_in = x[0]
@@ -291,10 +294,9 @@ class DeepONet(nn.Module):
         b_in = self.branch(b_in)
         # Notice that in trunk we apply the activation
         # also to the last layer
-        t_in = self.act_t(self.trunk(t_in))
+        t_in = self.trunk(t_in)
+        # multiplicative merger operation
         out = torch.einsum("ij,kj->ik",b_in,t_in) # check with dataset
-        # add bias
-        out += self.b
         return out
 
 #########################################
@@ -407,11 +409,15 @@ class FourierLayer(nn.Module):
         x = torch.fft.irfft(out_ft, n=x.size(-1))
         return x
 
-class FNO(nn.Module):
+#########################################
+#            FNO-DeepONet CLASS
+#########################################
+class FNO_DeepONet(nn.Module):
     """ 
     Fourier Neural Operator for approximate the Hodgkin-Huxley model
+    We remove the lifting operator, which will be given by our DeepONetLinear
     """
-    def __init__(self, d_a, d_v, d_u, L, modes, activation):
+    def __init__(self, layers, init_don, d_a, d_v, d_u, L, modes, act_fno):
         """ 
         L: int
            depth of FNO
@@ -436,11 +442,11 @@ class FNO(nn.Module):
         self.d_u = d_u
         self.L = L
         self.modes = modes
-        self.activation = activation
+        self.activation = act_fno
         
         #### Lifting operator
-        self.p = nn.Linear(d_a, d_v) # input features is d_a = 2: (a(t), t)
-        
+        self.p = DeepONetLinear(layers, init_don)
+
         # classic architecture
         if arc == "Classic":
             #### Fourier operator
@@ -469,6 +475,7 @@ class FNO(nn.Module):
         
         #### Apply lifting operator P
         x = self.p(x) # x.size() = (n_samples)*(n_t)*(d_v)
+        x = x.unsqueeze(-1)
         x = x.permute(0, 2, 1) # x.size() = (n_samples)*(d_v)*(n_t)
         
         #### Fourier Layers
@@ -497,21 +504,6 @@ class FNO(nn.Module):
         return x.squeeze()
 
 #########################################
-#            FNO-DeepONet CLASS
-#########################################
-class FNO_DeepONet(nn.Module):
-    def __init__(self, layers, act_don, init_don, d_a, d_v, d_u, L, modes, act_fno):
-        super().__init__()
-        self.deeponet = DeepONet(layers, act_don, init_don)
-        self.fno      = FNO(d_a, d_v, d_u, L, modes, act_fno)
-
-    def forward(self,x):
-        out_don = self.deeponet(x)
-        out_don = out_don.unsqueeze(-1)
-        out = self.fno(out_don)
-        return out
-
-#########################################
 #                 MAIN
 #########################################
 if __name__=="__main__":
@@ -521,8 +513,6 @@ if __name__=="__main__":
     #### Network parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
               "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
-    activ  = {"branch" : activation(activation_b),
-              "trunk"  : activation(activation_t)}
     init   = {"branch" : initializer(initial_b),
               "trunk"  : initializer(initial_t)}
     #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
@@ -536,7 +526,7 @@ if __name__=="__main__":
 
     d_a = 1
     d_u = 1
-    model = FNO_DeepONet(layers,activ,init,d_a,d_v,d_u,L,modes,fun_actFNO)
+    model = FNO_DeepONet(layers,init,d_a,d_v,d_u,L,modes,fun_actFNO)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
