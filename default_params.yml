@@ -19,6 +19,13 @@ activation_b  : "Tanh"
 activation_t  : "Sin"
 initial_b     : "Glorot normal"
 initial_t     : "Glorot normal"
+#### FNO parameters
+fun_actFNO    : "ReLu"
+scalar        : "Real"
+arc           : "Classic"
+L             : 4
+d_v           : 32
+modes         : 16
 #### Plotting and tensorboard
 ep_step       : 200 
 idx           : [7, 42, 93, 158]          # random test sample

@@ -154,7 +154,7 @@ def fnn_B_adapt(X, W, b, a, c):
     L = len(W)
     for i in range(L-1):
         outputs = jnp.dot(inputs, W[i]) + b[i]
-        inputs = jnp.sin(10*a[i]*outputs+c[i])  
+        inputs = jnp.sin(10*a[i]*outputs*jnp.pi+c[i])  
     Y = jnp.dot(inputs, W[-1]) + b[-1]     
     return Y
 
