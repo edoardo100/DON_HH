@@ -1,32 +1,34 @@
 #### Dataset parameters
-dataname      : "datasetHH_test1.mat"
-split         : 1600
-batch_size    : 100
+dataname: "datasetHH_test1.mat"
+split: 1600
+batch_size: 100
 #### Architecture parameters
-scaling       : "Default"                # Default, Gaussian, or Mixed
-weights_norm  : "Xavier"                  # Xavier or Kaiming
-adapt_actfun  : True
-scheduler     : "StepLR"
-Loss          : "L2"                      # MSE or L2
-epochs        : 1000
-lr            : 0.001
-u_dim         : 3                         # Input dimension for Branch Net
-x_dim         : 1                         # Input dimension for Trunk Net
-G_dim         : 50                       # Output dimension
-inner_layer_b : [50]  
-inner_layer_t : [50]
-activation_b  : "Tanh"
-activation_t  : "Tanh"
-initial_b     : "Glorot normal"
-initial_t     : "Glorot normal"
+scaling: "Default" # Default, Gaussian, or Mixed
+weights_norm: "Xavier" # Xavier or Kaiming
+adapt_actfun: False
+scheduler: "StepLR"
+Loss: "L2" # MSE or L2
+epochs: 10000
+lr: 0.001
+u_dim: 3 # Input dimension for Branch Net
+x_dim: 1 # Input dimension for Trunk Net
+G_dim: 50 # Output dimension
+inner_layer_b: [25, 50, 50, 75]
+inner_layer_t: [25, 50, 50, 75]
+activation_b: "Tanh"
+activation_t: "Tanh"
+arc_b: "FNN_BN"
+arc_t: "FNN_BN"
+initial_b: "Glorot normal"
+initial_t: "Glorot normal"
 #### FNO parameters
-fun_actFNO    : "ReLu"
-scalar        : "Real"
-arc           : "Classic"
-L             : 4
-d_v           : 1
-modes         : 32
+fun_actFNO: "ReLu"
+scalar: "Real"
+arc: "Classic"
+L: 4
+d_v: 1
+modes: 32
 #### Plotting and tensorboard
-ep_step       : 20 
-idx           : [7, 42, 93, 158]          # random test sample
-plotting      : False
+ep_step: 20
+idx: [7, 42, 93, 158] # random test sample
+plotting: False

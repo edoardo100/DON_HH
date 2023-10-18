@@ -76,6 +76,8 @@ inner_layer_b = config["inner_layer_b"]
 inner_layer_t = config["inner_layer_t"]
 activation_b  = config["activation_b"]
 activation_t  = config["activation_t"]
+arc_b         = config["arc_b"] 
+arc_t         = config["arc_t"] 
 initial_b     = config["initial_b"]
 initial_t     = config["initial_t"]
 #### Plotting parameters
@@ -232,13 +234,14 @@ class L2relLoss():
 # FNN class
 #########################################  
 class FNN(nn.Module):
-    def __init__(self, layer_sizes, activation, kernel_initializer):
+    def __init__(self, layer_sizes, activation_str, kernel_initializer):
         super().__init__()
         self.layers      = layer_sizes
-        self.activation  = activation
+        self.activation  = activation(activation_str)
         self.initializer = kernel_initializer
         self.linears     = nn.ModuleList()
         self.adapt_rate  = None
+        
         if adapt_actfun:
             self.adapt_rate = 0.1
 
@@ -257,22 +260,76 @@ class FNN(nn.Module):
             x = self.activation(linear(x))
         x = self.linears[-1](x)
         return x
+    
+#########################################
+# FNN_BN class
+#########################################  
+class FNN_BN(nn.Module):
+    def __init__(self, layer_sizes, activation_str, kernel_initializer):
+        super().__init__()
+        self.layers      = layer_sizes
+        self.activation  = activation(activation_str)
+        self.initializer = kernel_initializer
+        self.linears     = nn.ModuleList()
+        self.batch_layer = nn.ModuleList()
+        self.adapt_rate  = None
+        
+        if adapt_actfun:
+            self.adapt_rate = 0.1
+            
+        if activation_str.lower() == "tanh" or activation_str.lower() == "relu" or activation_str.lower() == "leaky_relu":
+            gain = nn.init.calculate_gain(activation_str.lower())
+        else:
+            gain = 1
+
+        # Assembly the network
+        for i in range(1,len(layer_sizes)):
+            self.linears.append(
+                AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate)
+            )
+            # Initialize the parameters
+            self.initializer(self.linears[-1].weight, gain)
+            # Initialize bias to zero
+            initializer("zeros")(self.linears[-1].bias) 
+            
+            if i > 1 and i < len(layer_sizes) - 1:
+                self.batch_layer.append( nn.BatchNorm1d(layer_sizes[i]) )
+            
+    
+    def forward(self,x):
+        for i, linear in enumerate(self.linears[:-1]):
+            if i == 0:
+                x = self.activation(linear(x))
+            else:
+                x = self.activation(self.batch_layer[i-1](linear(x)))
+        x = self.linears[-1](x)
+        return x
+    
 
 #########################################
 # DeepONet class
 #########################################  
 class DeepONet(nn.Module):
-    def __init__(self, layers, activation, kernel_initializer):
+    def __init__(self, layers, activation_str, kernel_initializer):
         """ parameters are dictionaries """
         super().__init__()
         self.layer_b = layers["branch"]
         self.layer_t = layers["trunk"]
-        self.act_b   = activation["branch"]
-        self.act_t   = activation["trunk"]
+        self.act_b   = activation(activation_str["branch"])
+        self.act_t   = activation(activation_str["trunk"])
         self.init_b  = kernel_initializer["branch"]
         self.init_t  = kernel_initializer["trunk"]
-        self.branch  = FNN(self.layer_b,self.act_b,self.init_b)
-        self.trunk   = FNN(self.layer_t,self.act_t,self.init_t)
+        
+        if arc_b == "FNN":
+            self.branch  = FNN(self.layer_b, activation_str["branch"], self.init_b)
+        elif arc_b == "FNN_BN":
+            self.branch  = FNN_BN(self.layer_b, activation_str["branch"], self.init_b)
+            
+        if arc_t == "FNN":
+            self.trunk   = FNN(self.layer_t, activation_str["trunk"], self.init_t)
+        elif arc_t == "FNN_BN":
+            self.trunk  = FNN_BN(self.layer_t, activation_str["trunk"], self.init_t)
+            
         # Final bias
         self.b       = nn.parameter.Parameter(torch.tensor(0.0))
 
@@ -298,10 +355,11 @@ if __name__=="__main__":
     #### Network parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
               "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
-    activ  = {"branch" : activation(activation_b),
-              "trunk"  : activation(activation_t)}
+    activ  = {"branch" : activation_b,
+              "trunk"  : activation_t}
     init   = {"branch" : initializer(initial_b),
               "trunk"  : initializer(initial_t)}
+    
     #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
     scale_fac, u_train, x_train, v_train, u_test, x_test, v_test = load_dataset(dataname,split,scaling)
 
