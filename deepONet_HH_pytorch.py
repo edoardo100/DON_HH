@@ -179,7 +179,7 @@ def load_dataset(dataname,split,scaling):
     u_data    = torch.tensor(d['vs']).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
-    v_data2   = (torch.tensor(d['iapps'])[:,2]).float()   # pulse intensities
+    v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
     scale_fac = []
     if scaling == "Default":
         u_max, u_min, u_data = scale_data(u_data,0.0,1.0)
@@ -199,7 +199,12 @@ def load_dataset(dataname,split,scaling):
         v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
         v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
         scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
-    v_data = torch.cat((v_data1,v_data2.reshape(-1,1)),axis=1)
+    if arc_b == "ResNet":
+        domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
+        v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
+        v_data = v_data*v_data2
+    else:
+        v_data = torch.cat((v_data1,v_data2.reshape(-1,1)),axis=1)
     u_train, x_train, v_train = u_data[:split], x_data.t(), v_data[:split]
     u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
     return scale_fac, u_train, x_train, v_train, u_test, x_test, v_test
@@ -229,6 +234,103 @@ class L2relLoss():
     
     def __call__(self, x, y):
         return self.rel(x, y)
+
+#########################################
+# ResNet-CNN class
+#########################################  
+conv_2d = False 
+class ResidualBlockCNN(nn.Module):
+    def __init__(self,in_channels,out_channels,stride=1,downsample=None):
+        super().__init__()
+        if conv_2d:
+            self.conv1 = nn.Sequential(
+                        nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=stride,padding=1),
+                        nn.BatchNorm2d(out_channels),
+                        nn.ReLU())
+            self.conv2 = nn.Sequential(            
+                        nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=1,padding=1),
+                        nn.BatchNorm2d(out_channels))
+        else:
+            self.conv1 = nn.Sequential(
+                        nn.Conv1d(in_channels,out_channels,kernel_size=3,stride=stride,padding=1),
+                        nn.BatchNorm1d(out_channels),
+                        nn.ReLU())
+            self.conv2 = nn.Sequential(            
+                        nn.Conv1d(out_channels,out_channels,kernel_size=3,stride=1,padding=1),
+                        nn.BatchNorm1d(out_channels))
+        self.downsample = downsample
+        self.relu = nn.ReLU()
+        self.out_channels = out_channels
+
+    def forward(self,x):
+        residual = x
+        out = self.conv1(x)
+        out = self.conv2(out)
+        if self.downsample:
+            residual = self.downsample(x)
+        out += residual
+        out = self.relu(out)
+        return out
+
+class ResNet(nn.Module):
+    def __init__(self,block,layers,num_classes=G_dim):
+        super().__init__()
+        self.inplanes = 16
+        if conv_2d:
+            self.conv1 = nn.Sequential(
+                            nn.Conv2d(1,16,kernel_size=7,stride=2,padding=3),
+                            nn.BatchNorm2d(16),
+                            nn.ReLU())
+            self.maxpool = nn.MaxPool2d(kernel_size=3,stride=2,padding=1)
+        else:
+            self.conv1 = nn.Sequential(
+                            nn.Conv1d(1,16,kernel_size=7,stride=2,padding=3),
+                            nn.BatchNorm1d(16),
+                            nn.ReLU())
+            self.maxpool = nn.MaxPool1d(kernel_size=3,stride=2,padding=1)
+        self.layer0  = self._make_layer(block,16,layers[0],stride=1)
+        self.layer1  = self._make_layer(block,32,layers[1],stride=2)
+        self.layer2  = self._make_layer(block,64,layers[2],stride=2)
+        self.layer3  = self._make_layer(block,128,layers[3],stride=2)
+        if conv_2d:
+            self.avgpool = nn.AvgPool2d(7, stride=1)
+        else:
+            self.avgpool = nn.AvgPool1d(7, stride=1)
+        self.fc      = nn.Linear(1280,num_classes)
+    
+    def _make_layer(self,block,planes,blocks,stride=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes:
+            if conv_2d:
+                downsample = nn.Sequential(
+                    nn.Conv2d(self.inplanes,planes,kernel_size=1,stride=stride),
+                    nn.BatchNorm2d(planes)
+                )
+            else:
+                downsample = nn.Sequential(
+                    nn.Conv1d(self.inplanes,planes,kernel_size=1,stride=stride),
+                    nn.BatchNorm1d(planes)
+                )
+        layers = []
+        layers.append(block(self.inplanes,planes,stride,downsample))
+        self.inplanes = planes
+        for i in range(1,blocks):
+            layers.append(block(self.inplanes,planes))
+        return nn.Sequential(*layers)
+    
+    def forward(self,x):
+        x = self.conv1(x)
+        x = self.maxpool(x)
+        x = self.layer0(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0),-1)
+        x = self.fc(x)
+
+        return x
 
 #########################################
 # FNN class
@@ -324,7 +426,9 @@ class DeepONet(nn.Module):
             self.branch  = FNN(self.layer_b, activation_str["branch"], self.init_b)
         elif arc_b == "FNN_BN":
             self.branch  = FNN_BN(self.layer_b, activation_str["branch"], self.init_b)
-            
+        elif arc_b == "ResNet":
+            self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
+
         if arc_t == "FNN":
             self.trunk   = FNN(self.layer_t, activation_str["trunk"], self.init_t)
         elif arc_t == "FNN_BN":
@@ -335,6 +439,9 @@ class DeepONet(nn.Module):
 
     def forward(self,x):
         b_in = x[0]
+        if arc_b == "ResNet":
+            b_in = b_in.unsqueeze(-1)
+            b_in = b_in.permute(0,2,1)
         t_in = x[1]
         b_in = self.branch(b_in)
         # Notice that in trunk we apply the activation

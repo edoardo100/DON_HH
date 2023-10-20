@@ -17,7 +17,7 @@ inner_layer_b: [25, 50, 50, 75]
 inner_layer_t: [25, 50, 50, 75]
 activation_b: "Tanh"
 activation_t: "Tanh"
-arc_b: "FNN_BN"
+arc_b: "ResNet"
 arc_t: "FNN_BN"
 initial_b: "Glorot normal"
 initial_t: "Glorot normal"
