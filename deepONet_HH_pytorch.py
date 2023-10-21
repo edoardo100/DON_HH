@@ -178,7 +178,7 @@ def load_dataset(dataname,split,scaling):
     d         = sio.loadmat(dataname)
     u_data    = torch.tensor(d['vs']).float()
     x_data    = torch.tensor(d['tspan']).float()
-    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
+    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float()   # pulse times
     v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
     scale_fac = []
     if scaling == "Default":
@@ -220,6 +220,7 @@ def load_data_for_plotting(dataname,split):
     v_data = v_data*v_data2
     u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
     return u_test, x_test, v_test
+
 #########################################
 # loss function
 #########################################
@@ -234,6 +235,16 @@ class L2relLoss():
     
     def __call__(self, x, y):
         return self.rel(x, y)
+    
+class MSE():
+    """ sum of relative L^2 error """        
+    def mse(self, x, y):
+        num_examples = x.size()[0]
+        diff = torch.square(x.reshape(num_examples,-1) - y.reshape(num_examples,-1))
+        return torch.sum(diff)
+    
+    def __call__(self, x, y):
+        return self.mse(x, y)
 
 #########################################
 # ResNet-CNN class
@@ -497,6 +508,8 @@ if __name__=="__main__":
     # Loss function
     if Loss == "L2":
         myloss = L2relLoss()
+    elif Loss == "mse":
+        myloss = MSE()
     #elif Loss == 'H1':
     #    myloss = H1relLoss()
     t1 = default_timer()
@@ -515,7 +528,7 @@ if __name__=="__main__":
             out = model.forward((v,x_train)) # compute the output
             
             # compute the loss
-            if Loss == 'L2':
+            if Loss == 'L2' or Loss == 'mse':
                 loss = myloss(out.view(batch_size, -1), u.view(batch_size, -1))
             elif Loss == 'H1':
                 loss = myloss(out, u)
@@ -532,7 +545,8 @@ if __name__=="__main__":
         
         #### Evaluate the model on the test set
         model.eval()
-        test_l2 = 0.0
+        test_l2  = 0.0
+        test_mse = 0.0
         #test_h1 = 0.0
         with torch.no_grad():
             for v, u in test_loader:
@@ -540,21 +554,25 @@ if __name__=="__main__":
     
                 out = model.forward((v,x_test))      
                 test_l2 += L2relLoss()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
+                test_mse += MSE()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
                 #test_h1 += H1relLoss()(out, u).item()
                 
         train_loss /= split
         test_l2 /= u_test.shape[0]
+        test_mse /= u_test.shape[0]
         #test_h1 /= u_test.shape[0]
     
         t2 = default_timer()
         if ep%100==0:
             print('Epoch:', ep, 'Time:', t2-t1,
-                  'Train_loss:', train_loss, 'Test_loss_l2:', test_l2, 
+                  'Train_loss_'+Loss+':', train_loss, 'Test_loss_l2:', test_l2,
+                  'Test_mse:', test_mse, 
                   #'Test_loss_h1:', test_h1
                   )
 
             writer.add_scalars('DON_HH', {'Train_loss': train_loss,
                                                     'Test_loss_l2': test_l2,
+                                                    'Test_mse:': test_mse,
                                                     #'Test_loss_h1': test_h1
                                                      }, ep)
     #########################################
@@ -627,6 +645,6 @@ if __name__=="__main__":
                 plt.show()
             writer.add_figure('Module of the difference', fig, ep)
 
-    writer.flush() # per salvare i dati finali
-    writer.close() # chiusura writer tensorboard
+    writer.flush() # to save final data
+    writer.close() # close tensorboard writer
     torch.save(model, name_model)
