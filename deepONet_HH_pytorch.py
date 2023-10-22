@@ -616,7 +616,7 @@ if __name__=="__main__":
                     out_test = model((esempio_test_pp.to(mydevice),x_test.to(mydevice)))
                     out_test = out_test.to('cpu')
             if scaling == "Default":
-                out_test = unscale_data(out_test.to(mydevice),scale_fac[1],scale_fac[0])
+                out_test = unscale_data(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             elif scaling == "Gaussian":
                 out_test = inverse_gaussian_scale(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             elif scaling == "Mixed":
