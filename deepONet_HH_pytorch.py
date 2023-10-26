@@ -32,13 +32,9 @@ mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 torch.set_default_device(mydevice) # default tensor device
 torch.set_default_dtype(torch.float32) # default tensor dtype
 
-
-# plotting
-import matplotlib.pyplot as plt
-
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="default_params.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="DON_test6.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
 # Read the configuration from the specified YAML file
@@ -158,10 +154,9 @@ def scale_data(data, min_value, max_value):
     return data_min, data_max, scaled_data
 
 def unscale_data(scaled_data, original_max, original_min):
-    # Apply the inverse linear transformation
-    unscaled_data = (scaled_data - original_min) / (original_max - original_min)
     # Map the unscaled data back to the original range
-    unscaled_data = unscaled_data * (original_max - original_min) + original_min
+    # supposing that scaled_data is scaled in [0,1]
+    unscaled_data = scaled_data * (original_max - original_min) + original_min
     return unscaled_data
 
 def gaussian_scale(data):
@@ -553,6 +548,18 @@ if __name__=="__main__":
                 v, u = v.to(mydevice), u.to(mydevice)
     
                 out = model.forward((v,x_test))      
+                
+                # rescaling to compute the test error
+                if scaling == "Default":
+                    out = unscale_data(out.to(mydevice),scale_fac[0],scale_fac[1])
+                    u = unscale_data(u.to(mydevice),scale_fac[0],scale_fac[1])
+                elif scaling == "Gaussian":
+                    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
+                    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
+                elif scaling == "Mixed":
+                    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
+                    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
+                    
                 test_l2 += L2relLoss()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
                 test_mse += MSE()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
                 #test_h1 += H1relLoss()(out, u).item()
@@ -572,7 +579,7 @@ if __name__=="__main__":
 
             writer.add_scalars('DON_HH', {'Train_loss': train_loss,
                                                     'Test_loss_l2': test_l2,
-                                                    'Test_mse:': test_mse,
+                                                    'Test_mse': test_mse
                                                     #'Test_loss_h1': test_h1
                                                      }, ep)
     #########################################
@@ -615,12 +622,14 @@ if __name__=="__main__":
             with torch.no_grad():  # no grad for effeciency reason
                     out_test = model((esempio_test_pp.to(mydevice),x_test.to(mydevice)))
                     out_test = out_test.to('cpu')
+                    
             if scaling == "Default":
                 out_test = unscale_data(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             elif scaling == "Gaussian":
                 out_test = inverse_gaussian_scale(out_test.to(mydevice),scale_fac[0],scale_fac[1])
             elif scaling == "Mixed":
                 out_test = inverse_gaussian_scale(out_test.to(mydevice),scale_fac[0],scale_fac[1])
+                
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
             fig.suptitle('DON approximation (V_m)')
             ax[0].set(ylabel = 'V_m (mV)')
