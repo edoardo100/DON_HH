@@ -151,7 +151,7 @@ def scale_data(data, min_value, max_value):
     data_max = torch.max(data)
     # Apply the linear transformation
     scaled_data = (max_value - min_value) * (data - data_min) / (data_max - data_min) + min_value
-    return data_min, data_max, scaled_data
+    return data_max, data_min, scaled_data
 
 def unscale_data(scaled_data, original_max, original_min):
     # Map the unscaled data back to the original range
