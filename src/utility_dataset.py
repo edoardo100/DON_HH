@@ -114,7 +114,7 @@ def load_single_train(dataname,scaling="None",labels=False,full_v_data=False):
 """
 Load train: to merge different datasets
 """
-def load_train(dataname, scaling="None", labels=False, full_v_data=False):
+def load_train(dataname, scaling=None, labels=False, full_v_data=False, shuffle=False):
     # Initialize empty lists to store the data
     all_u_data = []
     all_v_data = []
@@ -172,6 +172,13 @@ def load_train(dataname, scaling="None", labels=False, full_v_data=False):
     else:
         all_v_data = torch.cat((v_data1,v_data2),axis=1)
 
+    # shuffle data
+    if shuffle:
+        indices = torch.randperm(all_u_data.shape[0])
+        all_u_data = all_u_data[indices]
+        all_v_data = all_v_data[indices]
+        return all_u_data, x_data, all_v_data, scale_fac, indices
+
     return all_u_data, x_data, all_v_data, scale_fac
 
 """
@@ -180,7 +187,7 @@ Test differs from train by the fact that the normalization is induced by the
 parameters obtained by scale_fac of the train. Otherwise the network would 
 have some information got from data that shouldn't know before the test phase.
 """
-def load_single_test(dataname,scale_fac,scaling="None",labels=False,full_v_data=False):
+def load_single_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_data=False):
     d         = sio.loadmat(dataname)
     u_data    = torch.tensor(d['vs']).float()
     x_data    = torch.tensor(d['tspan']).float()
@@ -223,7 +230,7 @@ def load_single_test(dataname,scale_fac,scaling="None",labels=False,full_v_data=
 
     return u_data, x_data.t(), v_data
 
-def load_test(dataname,scale_fac,scaling="None",labels=False,full_v_data=False):
+def load_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_data=False,shuffle=False):
     # Initialize empty lists to store the data
     all_u_data = []
     all_v_data = []
@@ -239,10 +246,17 @@ def load_test(dataname,scale_fac,scaling="None",labels=False,full_v_data=False):
     all_u_data = torch.cat(all_u_data, dim=0)
     all_v_data = torch.cat(all_v_data, dim=0)
 
+   # shuffle data
+    if shuffle:
+        indices = torch.randperm(all_u_data.shape[0])
+        all_u_data = all_u_data[indices]
+        all_v_data = all_v_data[indices]
+        return all_u_data, x_data, all_v_data, indices
+
     return all_u_data, x_data, all_v_data
 
 
-""" main for test. TO DELETE """
+""" main for test """
 if __name__=="__main__":
     dataname = ["dataset/datasetHH_test_0peaks.mat",
                 "dataset/datasetHH_test_1peaks.mat",
@@ -260,10 +274,12 @@ if __name__=="__main__":
                 "dataset/datasetHH_test_5peaks_test.mat",
                 "dataset/datasetHH_test_6peaks_test.mat"]
     
-    scaling     = "Default"
+    scaling     = "None"
     labels      = True
     full_v_data = False
+    shuffle     = True
 
-    u_train, x_train, v_train, scale_fac = load_train(dataname,scaling,labels,full_v_data)
-    u_test, x_test, v_test = load_test(dataname_test,scale_fac,scaling,labels,full_v_data)
+    u_train, x_train, v_train, scale_fac, indices = load_train(dataname,scaling,labels,full_v_data,shuffle)
+    #u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle)
+    u_test, x_test, v_test = load_test(dataname_test)
     print("Effettuato")

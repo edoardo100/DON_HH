@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 """
+deepONet_HH_pytorch.py
+
+author: Edoardo Centofanti
+
 Learning Hodgkin-Huxley model with DeepONet
 """
-
+# internal modules
+from utility_dataset import *
+from architectures import L2relLoss, MSE, DeepONet
+# external modules
 import torch
 from timeit import default_timer
-import torch.nn.functional as F
-import torch.nn as nn
 import scipy.io as sio
 # for test launcher interface
 import os
@@ -34,7 +39,7 @@ torch.set_default_dtype(torch.float32) # default tensor dtype
 
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="DON_test6.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="default_params_new.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
 # Read the configuration from the specified YAML file
@@ -55,8 +60,8 @@ name_model = 'model_' + param_file_name
 #########################################
 # DeepONet's hyperparameter
 #########################################
-dataname      = config["dataname"]
-split         = config["split"]
+dataset_train = config["dataset_train"]
+dataset_test  = config["dataset_test"]
 batch_size    = config["batch_size"]
 scaling       = config["scaling"]
 weights_norm  = config["weights_norm"]
@@ -83,385 +88,15 @@ n_idx    = len(idx)
 plotting = config["plotting"]
 
 #########################################
-# activation functions and initializers
-#########################################
-class AdaptiveLinear(nn.Linear):
-    """Applies a linear transformation to the input data as follows
-    :math:`y = naxA^T + b`.
-    More details available in Jagtap, A. D. et al. Locally adaptive
-    activation functions with slope recovery for deep and
-    physics-informed neural networks, Proc. R. Soc. 2020.
-
-    Parameters
-    ----------
-    in_features : int
-        The size of each input sample
-    out_features : int 
-        The size of each output sample
-    bias : bool, optional
-        If set to ``False``, the layer will not learn an additive bias
-    adaptive_rate : float, optional
-        Scalable adaptive rate parameter for activation function that
-        is added layer-wise for each neuron separately. It is treated
-        as learnable parameter and will be optimized using a optimizer
-        of choice
-    adaptive_rate_scaler : float, optional
-        Fixed, pre-defined, scaling factor for adaptive activation
-        functions
-    """
-    def __init__(self, in_features, out_features, bias=True, adaptive_rate=None, adaptive_rate_scaler=None):
-        super(AdaptiveLinear, self).__init__(in_features, out_features, bias)
-        self.adaptive_rate = adaptive_rate
-        self.adaptive_rate_scaler = adaptive_rate_scaler
-        if self.adaptive_rate:
-            self.A = nn.Parameter(self.adaptive_rate * torch.ones(self.in_features))
-            if not self.adaptive_rate_scaler:
-                self.adaptive_rate_scaler = 10.0
-            
-    def forward(self, input):
-        if self.adaptive_rate:
-            return nn.functional.linear(self.adaptive_rate_scaler * self.A * input, self.weight, self.bias)
-        return nn.functional.linear(input, self.weight, self.bias)
-
-def activation(act_fun):
-    act_dict = {
-        "ReLu"     : F.relu,
-        "Tanh"     : F.tanh,
-        "GELU"     : F.gelu,
-        "Sigmoid"  : F.sigmoid,
-        "Sin"      : torch.sin,
-    }
-    return act_dict[act_fun]
-    
-def initializer(initial):
-    initial_dict = {
-        "Glorot normal": torch.nn.init.xavier_normal_,
-        "Glorot uniform": torch.nn.init.xavier_uniform_,
-        "He normal": torch.nn.init.kaiming_normal_,
-        "He uniform": torch.nn.init.kaiming_uniform_,
-        "zeros": torch.nn.init.zeros_,
-    }
-    return initial_dict[initial]
-
-#########################################
-# reading and scaling data
-#########################################
-def scale_data(data, min_value, max_value):
-    data_min = torch.min(data)
-    data_max = torch.max(data)
-    # Apply the linear transformation
-    scaled_data = (max_value - min_value) * (data - data_min) / (data_max - data_min) + min_value
-    return data_max, data_min, scaled_data
-
-def unscale_data(scaled_data, original_max, original_min):
-    # Map the unscaled data back to the original range
-    # supposing that scaled_data is scaled in [0,1]
-    unscaled_data = scaled_data * (original_max - original_min) + original_min
-    return unscaled_data
-
-def gaussian_scale(data):
-    mean = torch.mean(data)
-    std_dev = torch.std(data)
-    scaled_data = (data - mean) / std_dev
-    return mean, std_dev, scaled_data
-
-def inverse_gaussian_scale(scaled_data, original_mean, original_std_dev): 
-    unscaled_data = scaled_data * original_std_dev + original_mean
-    return unscaled_data
-
-def load_dataset(dataname,split,scaling):
-    d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs']).float()
-    x_data    = torch.tensor(d['tspan']).float()
-    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float()   # pulse times
-    v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
-    scale_fac = []
-    if scaling == "Default":
-        u_max, u_min, u_data = scale_data(u_data,0.0,1.0)
-        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
-        v_max1, v_min1, v_data1 = scale_data(v_data1,0.0,1.0)
-        v_max2, v_min2, v_data2 = scale_data(v_data2,0.0,1.0)
-        scale_fac = [u_max,u_min,x_max,x_min,v_max1,v_min1,v_max2,v_min2]
-    elif scaling == "Gaussian":
-        u_mean, u_std, u_data = gaussian_scale(u_data)
-        x_mean, x_std, x_data = gaussian_scale(x_data)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
-        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
-        scale_fac = [u_mean,u_std,x_mean,x_std,v_mean1,v_std1,v_mean2,v_std2]
-    elif scaling == "Mixed":
-        u_mean, u_std, u_data = gaussian_scale(u_data)
-        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
-        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
-        scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
-    if arc_b == "ResNet":
-        domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
-        v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
-        v_data = v_data*v_data2
-    else:
-        v_data = torch.cat((v_data1,v_data2.reshape(-1,1)),axis=1)
-    u_train, x_train, v_train = u_data[:split], x_data.t(), v_data[:split]
-    u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
-    return scale_fac, u_train, x_train, v_train, u_test, x_test, v_test
-
-def load_data_for_plotting(dataname,split):
-    d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs']).float()
-    x_data    = torch.tensor(d['tspan']).float()
-    v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float() # pulse times
-    v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
-    domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
-    v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
-    v_data = v_data*v_data2
-    u_test, x_test, v_test = u_data[split:], x_data.t(), v_data[split:]
-    return u_test, x_test, v_test
-
-#########################################
-# loss function
-#########################################
-class L2relLoss():
-    """ sum of relative L^2 error """        
-    def rel(self, x, y):
-        num_examples = x.size()[0]
-        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
-        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
-        
-        return torch.sum(diff_norms/y_norms)
-    
-    def __call__(self, x, y):
-        return self.rel(x, y)
-    
-class MSE():
-    """ sum of relative L^2 error """        
-    def mse(self, x, y):
-        num_examples = x.size()[0]
-        diff = torch.square(x.reshape(num_examples,-1) - y.reshape(num_examples,-1))
-        return torch.sum(diff)
-    
-    def __call__(self, x, y):
-        return self.mse(x, y)
-
-#########################################
-# ResNet-CNN class
-#########################################  
-conv_2d = False 
-class ResidualBlockCNN(nn.Module):
-    def __init__(self,in_channels,out_channels,stride=1,downsample=None):
-        super().__init__()
-        if conv_2d:
-            self.conv1 = nn.Sequential(
-                        nn.Conv2d(in_channels,out_channels,kernel_size=3,stride=stride,padding=1),
-                        nn.BatchNorm2d(out_channels),
-                        nn.ReLU())
-            self.conv2 = nn.Sequential(            
-                        nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=1,padding=1),
-                        nn.BatchNorm2d(out_channels))
-        else:
-            self.conv1 = nn.Sequential(
-                        nn.Conv1d(in_channels,out_channels,kernel_size=3,stride=stride,padding=1),
-                        nn.BatchNorm1d(out_channels),
-                        nn.ReLU())
-            self.conv2 = nn.Sequential(            
-                        nn.Conv1d(out_channels,out_channels,kernel_size=3,stride=1,padding=1),
-                        nn.BatchNorm1d(out_channels))
-        self.downsample = downsample
-        self.relu = nn.ReLU()
-        self.out_channels = out_channels
-
-    def forward(self,x):
-        residual = x
-        out = self.conv1(x)
-        out = self.conv2(out)
-        if self.downsample:
-            residual = self.downsample(x)
-        out += residual
-        out = self.relu(out)
-        return out
-
-class ResNet(nn.Module):
-    def __init__(self,block,layers,num_classes=G_dim):
-        super().__init__()
-        self.inplanes = 16
-        if conv_2d:
-            self.conv1 = nn.Sequential(
-                            nn.Conv2d(1,16,kernel_size=7,stride=2,padding=3),
-                            nn.BatchNorm2d(16),
-                            nn.ReLU())
-            self.maxpool = nn.MaxPool2d(kernel_size=3,stride=2,padding=1)
-        else:
-            self.conv1 = nn.Sequential(
-                            nn.Conv1d(1,16,kernel_size=7,stride=2,padding=3),
-                            nn.BatchNorm1d(16),
-                            nn.ReLU())
-            self.maxpool = nn.MaxPool1d(kernel_size=3,stride=2,padding=1)
-        self.layer0  = self._make_layer(block,16,layers[0],stride=1)
-        self.layer1  = self._make_layer(block,32,layers[1],stride=2)
-        self.layer2  = self._make_layer(block,64,layers[2],stride=2)
-        self.layer3  = self._make_layer(block,128,layers[3],stride=2)
-        if conv_2d:
-            self.avgpool = nn.AvgPool2d(7, stride=1)
-        else:
-            self.avgpool = nn.AvgPool1d(7, stride=1)
-        self.fc      = nn.Linear(1280,num_classes)
-    
-    def _make_layer(self,block,planes,blocks,stride=1):
-        downsample = None
-        if stride != 1 or self.inplanes != planes:
-            if conv_2d:
-                downsample = nn.Sequential(
-                    nn.Conv2d(self.inplanes,planes,kernel_size=1,stride=stride),
-                    nn.BatchNorm2d(planes)
-                )
-            else:
-                downsample = nn.Sequential(
-                    nn.Conv1d(self.inplanes,planes,kernel_size=1,stride=stride),
-                    nn.BatchNorm1d(planes)
-                )
-        layers = []
-        layers.append(block(self.inplanes,planes,stride,downsample))
-        self.inplanes = planes
-        for i in range(1,blocks):
-            layers.append(block(self.inplanes,planes))
-        return nn.Sequential(*layers)
-    
-    def forward(self,x):
-        x = self.conv1(x)
-        x = self.maxpool(x)
-        x = self.layer0(x)
-        x = self.layer1(x)
-        x = self.layer2(x)
-        x = self.layer3(x)
-
-        x = self.avgpool(x)
-        x = x.view(x.size(0),-1)
-        x = self.fc(x)
-
-        return x
-
-#########################################
-# FNN class
-#########################################  
-class FNN(nn.Module):
-    def __init__(self, layer_sizes, activation_str, kernel_initializer):
-        super().__init__()
-        self.layers      = layer_sizes
-        self.activation  = activation(activation_str)
-        self.initializer = kernel_initializer
-        self.linears     = nn.ModuleList()
-        self.adapt_rate  = None
-        
-        if adapt_actfun:
-            self.adapt_rate = 0.1
-
-        # Assembly the network
-        for i in range(1,len(layer_sizes)):
-            self.linears.append(
-                AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate)
-            )
-            # Initialize the parameters
-            self.initializer(self.linears[-1].weight)
-            # Initialize bias to zero
-            initializer("zeros")(self.linears[-1].bias) 
-    
-    def forward(self,x):
-        for linear in self.linears[:-1]:
-            x = self.activation(linear(x))
-        x = self.linears[-1](x)
-        return x
-    
-#########################################
-# FNN_BN class
-#########################################  
-class FNN_BN(nn.Module):
-    def __init__(self, layer_sizes, activation_str, kernel_initializer):
-        super().__init__()
-        self.layers      = layer_sizes
-        self.activation  = activation(activation_str)
-        self.initializer = kernel_initializer
-        self.linears     = nn.ModuleList()
-        self.batch_layer = nn.ModuleList()
-        self.adapt_rate  = None
-        
-        if adapt_actfun:
-            self.adapt_rate = 0.1
-            
-        if activation_str.lower() == "tanh" or activation_str.lower() == "relu" or activation_str.lower() == "leaky_relu":
-            gain = nn.init.calculate_gain(activation_str.lower())
-        else:
-            gain = 1
-
-        # Assembly the network
-        for i in range(1,len(layer_sizes)):
-            self.linears.append(
-                AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate)
-            )
-            # Initialize the parameters
-            self.initializer(self.linears[-1].weight, gain)
-            # Initialize bias to zero
-            initializer("zeros")(self.linears[-1].bias) 
-            
-            if i > 1 and i < len(layer_sizes) - 1:
-                self.batch_layer.append( nn.BatchNorm1d(layer_sizes[i]) )
-            
-    
-    def forward(self,x):
-        for i, linear in enumerate(self.linears[:-1]):
-            if i == 0:
-                x = self.activation(linear(x))
-            else:
-                x = self.activation(self.batch_layer[i-1](linear(x)))
-        x = self.linears[-1](x)
-        return x
-    
-
-#########################################
-# DeepONet class
-#########################################  
-class DeepONet(nn.Module):
-    def __init__(self, layers, activation_str, kernel_initializer):
-        """ parameters are dictionaries """
-        super().__init__()
-        self.layer_b = layers["branch"]
-        self.layer_t = layers["trunk"]
-        self.act_b   = activation(activation_str["branch"])
-        self.act_t   = activation(activation_str["trunk"])
-        self.init_b  = kernel_initializer["branch"]
-        self.init_t  = kernel_initializer["trunk"]
-        
-        if arc_b == "FNN":
-            self.branch  = FNN(self.layer_b, activation_str["branch"], self.init_b)
-        elif arc_b == "FNN_BN":
-            self.branch  = FNN_BN(self.layer_b, activation_str["branch"], self.init_b)
-        elif arc_b == "ResNet":
-            self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
-
-        if arc_t == "FNN":
-            self.trunk   = FNN(self.layer_t, activation_str["trunk"], self.init_t)
-        elif arc_t == "FNN_BN":
-            self.trunk  = FNN_BN(self.layer_t, activation_str["trunk"], self.init_t)
-            
-        # Final bias
-        self.b       = nn.parameter.Parameter(torch.tensor(0.0))
-
-    def forward(self,x):
-        b_in = x[0]
-        if arc_b == "ResNet":
-            b_in = b_in.unsqueeze(-1)
-            b_in = b_in.permute(0,2,1)
-        t_in = x[1]
-        b_in = self.branch(b_in)
-        # Notice that in trunk we apply the activation
-        # also to the last layer
-        t_in = self.act_t(self.trunk(t_in))
-        out = torch.einsum("ij,kj->ik",b_in,t_in) # check with dataset
-        # add bias
-        out += self.b
-        return out
-
-#########################################
 #                 MAIN
 #########################################
 if __name__=="__main__":
+
+    dataname = dataset_train 
+    dataname_test = dataset_test 
+    
+    labels      = False
+    full_v_data = False
 
     writer = SummaryWriter(log_dir = name_log_dir )
     
@@ -470,11 +105,12 @@ if __name__=="__main__":
               "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
     activ  = {"branch" : activation_b,
               "trunk"  : activation_t}
-    init   = {"branch" : initializer(initial_b),
-              "trunk"  : initializer(initial_t)}
+    init   = {"branch" : initial_b,
+              "trunk"  : initial_t}
     
-    #u_test, x_test, v_test = load_data_for_plotting(dataname,split)
-    scale_fac, u_train, x_train, v_train, u_test, x_test, v_test = load_dataset(dataname,split,scaling)
+    # Load dataset
+    u_train, x_train, v_train, scale_fac, _ = load_train(dataname,scaling,labels,full_v_data,shuffle=True)
+    u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
 
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
@@ -482,7 +118,7 @@ if __name__=="__main__":
     test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
                                               batch_size = batch_size) 
     
-    model = DeepONet(layers,activ,init)
+    model = DeepONet(layers,activ,init,arc_b,arc_t)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
@@ -497,7 +133,7 @@ if __name__=="__main__":
         scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 10000, gamma = 0.5)
     if scheduler == "CosineAnnealingLR":
         # Cosine Annealing Scheduler (SGD with warm restart)
-        iterations = epochs*(split//batch_size)
+        iterations = epochs*(u_train.shape[0]//batch_size)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = iterations)
 
     # Loss function
@@ -509,7 +145,10 @@ if __name__=="__main__":
     #    myloss = H1relLoss()
     t1 = default_timer()
     # Unscaled dataset (for plotting)
-    u_test_unscaled, x_unscaled, v_test_unscaled = load_data_for_plotting(dataname,split)
+    u_test_unscaled, x_unscaled, v_test_unscaled = load_test(dataname_test)
+    # Same order of scaled data
+    u_test_unscaled = u_test_unscaled[indices]
+    v_test_unscaled = v_test_unscaled[indices]
     # Training process
     for ep in range(epochs+1):
         #### One epoch of training
@@ -564,7 +203,7 @@ if __name__=="__main__":
                 test_mse += MSE()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
                 #test_h1 += H1relLoss()(out, u).item()
                 
-        train_loss /= split
+        train_loss /= u_train.shape[0]
         test_l2 /= u_test.shape[0]
         test_mse /= u_test.shape[0]
         #test_h1 /= u_test.shape[0]
