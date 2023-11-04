@@ -7,8 +7,8 @@ author: Edoardo Centofanti
 Learning Hodgkin-Huxley model with DeepONet
 """
 # internal modules
-from utility_dataset import *
-from architectures import L2relLoss, MSE, DeepONet
+from src.utility_dataset import *
+from src.architectures import L2relLoss, MSE, DeepONet
 # external modules
 import torch
 from timeit import default_timer
