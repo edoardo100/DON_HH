@@ -132,6 +132,9 @@ class ResidualBlockCNN(nn.Module):
         out = self.relu(out)
         return out
 
+#########################################
+# ResNet class
+#########################################
 class ResNet(nn.Module):
     def __init__(self,block,layers,num_classes): # num_classes should be G_dim
         super().__init__()
@@ -246,27 +249,34 @@ class FNN_BN(nn.Module):
 
         # Assembly the network
         for i in range(1,len(layer_sizes)):
-            self.linears.append(
-                AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate)
-            )
+            self.linears.append(nn.Linear(layer_sizes[i-1],layer_sizes[i]))
+            self.batch_layer.append(nn.BatchNorm1d(layer_sizes[i])) # BN
             # Initialize the parameters
-            self.initializer(self.linears[-1].weight, gain)
+            self.initializer(self.linears[-1].weight,gain)
             # Initialize bias to zero
-            initializer("zeros")(self.linears[-1].bias) 
-            
-            if i > 1 and i < len(layer_sizes) - 1:
-                self.batch_layer.append( nn.BatchNorm1d(layer_sizes[i]) )
+            initializer("zeros")(self.linears[-1].bias)
             
     
     def forward(self,x):
-        for i, linear in enumerate(self.linears[:-1]):
-            if i == 0:
-                x = self.activation(linear(x))
-            else:
-                x = self.activation(self.batch_layer[i-1](linear(x)))
+        for i in range(len(self.linears) - 1):
+            x = self.linears[i](x)
+            x = self.batch_layer[i](x)  # Apply batch normalization
+            x = self.activation(x)
+
         x = self.linears[-1](x)
         return x
     
+
+#########################################
+# myGRU class
+#########################################
+class myGRU(nn.Module):
+    def __init__(self,input_size):
+        super().__init__()
+        self.gru = nn.Sequential(
+                      nn.GRU(input_size=input_size,hidden_size=256),
+                      nn.GRU(input_size=256,hidden_size=128),
+                   )
 
 #########################################
 # DeepONet class
