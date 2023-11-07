@@ -265,7 +265,78 @@ class FNN_BN(nn.Module):
 
         x = self.linears[-1](x)
         return x
-    
+
+#########################################
+# FNN_LN class
+#########################################         
+class FNN_LN(nn.Module):
+
+    def __init__(self, layers, activation_str, initialization_str):
+        super().__init__()
+        self.layers = layers # list with the number of neurons for each layer
+        self.activation_str = activation_str
+        self.retrain = retrain
+        self.initialization_str = initialization_str
+        
+        # fix the seed for retrain
+        torch.manual_seed(self.retrain)
+        
+        # linear layers
+        self.linears = nn.ModuleList(
+            [ nn.Linear(self.layers[i], self.layers[i+1]) 
+              for i in range( len(self.layers) - 1 ) ])
+        
+        # batch normalization apllied in hidden layers
+        self.layer_norm = nn.ModuleList(
+            [ nn.LayerNorm(self.layers[i], device = mydevice)
+              for i in range(1, len(self.layers) - 2) ])
+
+        self.linears.apply(self.param_initialization)
+            
+    #  Initialization for parameters
+    def param_initialization(self, m):
+        torch.manual_seed(self.retrain) # fix the seed
+        
+        if type(m) == nn.Linear:
+            #### calculate gain 
+            if self.activation_str == "tanh" or self.activation_str == "relu":
+                gain = nn.init.calculate_gain(self.activation_str)
+                a = 0
+            elif self.activation_str == "leaky_relu":
+                gain = nn.init.calculate_gain(self.activation_str, 0.01)
+                a = 0.01
+            else:
+                gain = 1
+                a = 0.01
+            
+            #### weights initialization
+            if self.initialization_str == "xavier_uniform":
+                torch.nn.init.xavier_uniform_(m.weight.data, gain = gain)
+                
+            elif self.initialization_str == "xavier_normal":
+                torch.nn.init.xavier_normal_(m.weight.data, gain = gain)
+                
+            elif self.initialization_str == "kaiming_uniform":
+                torch.nn.init.kaiming_uniform_(m.weight.data, 
+                                               a = a, 
+                                               nonlinearity = self.activation_str)
+                
+            elif self.initialization_str == "kaiming_normal":
+                torch.nn.init.kaiming_normal_(m.weight.data, 
+                                               a = a, 
+                                               nonlinearity = self.activation_str)
+            #### bias initialization
+            torch.nn.init.zeros_(m.bias.data)
+
+    def forward(self, x):
+        x = activation(self.linears[0](x), self.activation_str)
+        
+        for i in range(1, len(self.layers) - 2):
+            x = activation(
+                    self.linears[i](
+                        self.layer_norm[i-1](x) ), self.activation_str)
+        
+        return self.linears[-1](x)   
 
 #########################################
 # myGRU class
@@ -298,6 +369,8 @@ class DeepONet(nn.Module):
             self.branch  = FNN(self.layer_b, self.act_b, self.init_b)
         elif self.arc_b == "FNN_BN":
             self.branch  = FNN_BN(self.layer_b, self.act_b, self.init_b)
+        elif arc_b == "FNN_LN":
+            self.branch  = FNN_LN(self.layers_b, self.act_b, self.init_b)
         elif self.arc_b == "ResNet":
             self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
 
@@ -305,6 +378,8 @@ class DeepONet(nn.Module):
             self.trunk   = FNN(self.layer_t, self.act_t, self.init_t)
         elif self.arc_t == "FNN_BN":
             self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t)
+        elif arc_t == "FNN_LN":
+            self.trunk  = FNN_LN(self.layers_t, self.act_t, self.init_t)
             
         # Final bias
         self.b = nn.parameter.Parameter(torch.tensor(0.0))
