@@ -46,7 +46,7 @@ torch.set_default_tensor_type(torch.FloatTensor) # default tensor dtype
 #########################################
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="test_143_1.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="default_params.yml", help="Path to the YAML configuration file")
 # default_params_max <-- parametri di dafault (check retro-compatibility)
 args = parser.parse_args()
 
@@ -553,7 +553,7 @@ if __name__ == '__main__':
     print("Total DeepONet parameters: ", par_tot)
     writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
-    # AdamW optimizer
+    # Adam optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = weight_decay)
     
     # lr policy
@@ -610,7 +610,7 @@ if __name__ == '__main__':
             for a, u in test_loader:
                 a, u = a.to(mydevice), u.to(mydevice)
     
-                out = model.forward(a,tspan_test)    
+                out = model.forward(a, tspan_test)    
                 # out = scale_data(out, 0, 1, u_data_min, u_data_max)
                 # u = scale_data(u, 0, 1, u_data_min, u_data_max)
                 

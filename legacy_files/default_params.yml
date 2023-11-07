@@ -1,34 +1,36 @@
-#### Dataset parameters
-dataname: "datasetHH_test1.mat"
-split: 1600
-batch_size: 100
-#### Architecture parameters
-scaling: "Default" # Default, Gaussian, or Mixed
-weights_norm: "Xavier" # Xavier or Kaiming
-adapt_actfun: False
-scheduler: "StepLR"
-Loss: "mse" # mse or L2
-epochs: 10000
+#### default_params
+#### Dataset hyper-parameters
+DataPath: "datasetHH_test1.mat"
+ntot: 2000
+ntrain: 1600
+ntest: 400
+s: 1 # subsampling parameter
+
+#### Training hyper-parameters
+retrain: 42
+epochs: 20000
 lr: 0.001
-u_dim: 3 # Input dimension for Branch Net
+batch_size: 100
+Loss: "L2" # "L2", "H1", "mse"
+weight_decay: 0.0001 # = 1e-4
+scheduler: "StepLR"
+step_size: 1000
+gamma: 0.8 # multiply the lr every step_size
+
+#### Architecture hyper-parameters
+u_dim: 500 # Input dimension for Branch Net
 x_dim: 1 # Input dimension for Trunk Net
-G_dim: 50 # Output dimension
-inner_layer_b: [50, 50, 50, 50]
-inner_layer_t: [50, 50, 50, 50]
-activation_b: "Tanh"
+N_FourierF: 0 # number of Fourier features to add in the Trunk Net
+G_dim: 500 # Output dimension
+exp_G: 0 # 0, 0.5, 1, 1.5
+inner_layer_b: [500, 500, 500]
+inner_layer_t: [500, 500, 500]
+activation_b: "Tanh" # 'relu', 'gelu', 'tanh', 'sin', 'leaky_relu', 'sin', 'sigmoid'
 activation_t: "Tanh"
-arc_b: "FNN_BN"
-arc_t: "FNN_BN"
-initial_b: "Glorot normal"
-initial_t: "Glorot normal"
-#### FNO parameters
-fun_actFNO: "ReLu"
-scalar: "Real"
-arc: "Classic"
-L: 4
-d_v: 1
-modes: 32
+arc_b: "FNN" # 'FNN', 'FNN_BN'
+arc_t: "FNN"
+
 #### Plotting and tensorboard
-ep_step: 20
-idx: [7, 42, 45, 15] # random test sample
+ep_step: 100
+idx: [7, 42, 93, 158] # random test sample
 plotting: False
