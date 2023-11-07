@@ -29,8 +29,11 @@ activation_b: "Tanh" # 'relu', 'gelu', 'tanh', 'sin', 'leaky_relu', 'sin', 'sigm
 activation_t: "Tanh"
 arc_b: "FNN" # 'FNN', 'FNN_BN'
 arc_t: "FNN"
+init_t: "xavier_uniform"
+init_b: "xavier_uniform"
+data_norm: True
 
 #### Plotting and tensorboard
 ep_step: 100
 idx: [7, 42, 93, 158] # random test sample
-plotting: False
+plotting: True

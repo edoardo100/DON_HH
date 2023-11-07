@@ -100,10 +100,18 @@ arc_t         = config["arc_t"]
 
 try:
     init_b = config["init_b"] # default, kaimimng, xavier
-    init_t = config["init_t"]
 except:
     init_b = "default"
+    
+try:
+    init_t = config["init_t"]
+except:
     init_t = "default"
+    
+try:
+    data_norm = config["data_norm"]
+except:
+    data_norm = False
 
 #### Plot and tensorboard
 ep_step  = config["ep_step"]
@@ -111,27 +119,6 @@ idx      = config["idx"]
 n_idx    = len(idx)
 plotting = config["plotting"]
 # On cluster plt.show() causes the program to freeze, since there is no graphics forwarding
-
-#########################################
-# activation function
-#########################################
-def activation(x, activation_str):
-    """
-    Activation function to utilize in the FNO architecture.
-    The activaction function is the same in all the FNO architecture.
-    """
-    if activation_str in ["ReLu", "relu"]:
-        return F.relu(x)
-    elif activation_str in ["LeakyReLU", "leaky_relu"]:
-        return torch.nn.LeakyReLU()(x)
-    elif activation_str in ["Tanh", "tanh"]:
-        return F.tanh(x)
-    elif activation_str in ["GELU", "gelu"]:
-        return F.gelu(x)
-    elif activation_str in ["sigmoid", "Sigmoid"]:
-        return F.Sigmoid(x)
-    elif activation_str in ["Sin", "sin"]:
-        return F.Sin(x)
 
 #########################################
 # reading data
@@ -185,6 +172,66 @@ def MatReader(file_path):
     a = a.to('cpu')
     
     return tspan, a, u
+
+#########################################
+# gaussian normalization
+#########################################
+class UnitGaussianNormalizer(object):
+    def __init__(self, x, eps = 1e-5):
+        super().__init__()
+
+        # x have shape of ntrain*n
+        self.mean = torch.mean(x, 0)
+        self.std = torch.std(x, 0)
+        self.eps = eps
+
+    def encode(self, x):
+        x = (x - self.mean) / (self.std + self.eps)
+        return x
+
+    def decode(self, x):
+        std = self.std + self.eps
+        mean = self.mean
+        x = (x * std) + mean
+        return x
+
+    def to(self, device):
+        if torch.is_tensor(self.mean):
+            self.mean = self.mean.to(device)
+            self.std = self.std.to(device)
+        else:
+            self.mean = torch.from_numpy(self.mean).to(device)
+            self.std = torch.from_numpy(self.std).to(device)
+        return self
+
+    def cuda(self):
+        self.mean = self.mean.cuda()
+        self.std = self.std.cuda()
+
+    def cpu(self):
+        self.mean = self.mean.cpu()
+        self.std = self.std.cpu()
+
+#########################################
+# activation function
+#########################################
+def activation(x, activation_str):
+    """
+    Activation function to utilize in the FNO architecture.
+    The activaction function is the same in all the FNO architecture.
+    """
+    if activation_str in ["ReLu", "relu"]:
+        return F.relu(x)
+    elif activation_str in ["LeakyReLU", "leaky_relu"]:
+        return torch.nn.LeakyReLU()(x)
+    elif activation_str in ["Tanh", "tanh"]:
+        return F.tanh(x)
+    elif activation_str in ["GELU", "gelu"]:
+        return F.gelu(x)
+    elif activation_str in ["sigmoid", "Sigmoid"]:
+        return F.Sigmoid(x)
+    elif activation_str in ["Sin", "sin"]:
+        return F.Sin(x)
 
 #########################################
 # FourierFeatures
@@ -354,6 +401,7 @@ class FNN_BN(nn.Module):
                 torch.nn.init.xavier_normal_(m.weight.data, gain = gain)
                 
             elif self.initialization_str == "kaiming_uniform":
+                # kaiming is suggested only for relu or leaky_relu
                 torch.nn.init.kaiming_uniform_(m.weight.data, 
                                                a = a, 
                                                nonlinearity = self.activation_str)
@@ -486,7 +534,7 @@ class DeepONet(nn.Module):
         # sclar product
         out = torch.einsum("ij,kj->ik",b_in,t_in)
         # add final bias
-        out += self.b
+        out += self.b     
         return out
 
 if __name__ == '__main__':
@@ -497,12 +545,7 @@ if __name__ == '__main__':
     
     #########################################
     # Preprocessing of the data
-    #########################################
-    def scale_data(data, data_min, data_max, min_value, max_value):
-        # Apply the linear transformation
-        scaled_data = (max_value - min_value) * (data - data_min) / (data_max - data_min) + min_value
-        return scaled_data
-    
+    #########################################    
     #### Index set
     g = torch.Generator().manual_seed(1) # fix the seed
     idx_tot = torch.randperm(ntot, device = 'cpu', generator = g)
@@ -514,24 +557,23 @@ if __name__ == '__main__':
     tspan_train, a_train, u_train = MatReader(DataPath)    
     tspan_train = tspan_train[::s].unsqueeze(-1).to(mydevice)
     a_train, u_train = a_train[idx_train, ::s], u_train[idx_train, ::s]
-    # normalize data 
-    # a_data_min, a_data_max = torch.min(a_train), torch.max(a_train)
-    # u_data_min, u_data_max = torch.min(u_train), torch.max(u_train)
-    # a_train = scale_data(a_train, a_data_min, a_data_max, 0, 1)
-    # u_train = scale_data(u_train, u_data_min, u_data_max, 0, 1)
     
     #### Test data
     tspan_test, a_test, u_test = MatReader(DataPath)
     tspan_test = tspan_test[::s].unsqueeze(-1).to(mydevice)
     a_test, u_test = a_test[idx_test, ::s], u_test[idx_test, ::s]
-    # a_test = scale_data(a_test, a_data_min, a_data_max, 0, 1)
-    # u_test = scale_data(u_test, u_data_min, u_data_max, 0, 1)
+    
+    #### normalize data 
+    if data_norm:
+        a_normalizer = UnitGaussianNormalizer(a_train)
+        a_train_pp = a_normalizer.encode(a_train) # pp = PostProcessed
+        a_test_pp = a_normalizer.encode(a_test)
     
     #### batch loader
-    train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_train, u_train),
+    train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_train_pp, u_train),
                                                 batch_size = batch_size)
     
-    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_test, u_test),
+    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_test_pp, u_test),
                                               batch_size = batch_size)    
     print('Data loaded')
     
@@ -553,7 +595,7 @@ if __name__ == '__main__':
     print("Total DeepONet parameters: ", par_tot)
     writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
-    # Adam optimizer
+    # AdamW optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = weight_decay)
     
     # lr policy
@@ -584,9 +626,7 @@ if __name__ == '__main__':
             
             optimizer.zero_grad() # annealing the gradient
             
-            out = model.forward(a, tspan_train) # compute the output
-            # out = scale_data(out, 0, 1, u_data_min, u_data_max)
-            # u = scale_data(u, 0, 1, u_data_min, u_data_max)
+            out = model.forward(a, tspan_train) # compute the outpu
             
             # compute the loss
             loss = myloss(out, u)
@@ -610,9 +650,7 @@ if __name__ == '__main__':
             for a, u in test_loader:
                 a, u = a.to(mydevice), u.to(mydevice)
     
-                out = model.forward(a, tspan_test)    
-                # out = scale_data(out, 0, 1, u_data_min, u_data_max)
-                # u = scale_data(u, 0, 1, u_data_min, u_data_max)
+                out = model.forward(a, tspan_test)  
                 
                 test_l2 += L2relLoss()(out, u).item()
                 test_mse += MSE()(out, u).item()
