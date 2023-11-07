@@ -270,16 +270,11 @@ class FNN_BN(nn.Module):
 # FNN_LN class
 #########################################         
 class FNN_LN(nn.Module):
-
     def __init__(self, layers, activation_str, initialization_str):
         super().__init__()
         self.layers = layers # list with the number of neurons for each layer
         self.activation_str = activation_str
-        self.retrain = retrain
         self.initialization_str = initialization_str
-        
-        # fix the seed for retrain
-        torch.manual_seed(self.retrain)
         
         # linear layers
         self.linears = nn.ModuleList(
@@ -288,15 +283,13 @@ class FNN_LN(nn.Module):
         
         # batch normalization apllied in hidden layers
         self.layer_norm = nn.ModuleList(
-            [ nn.LayerNorm(self.layers[i], device = mydevice)
+            [ nn.LayerNorm(self.layers[i])
               for i in range(1, len(self.layers) - 2) ])
 
         self.linears.apply(self.param_initialization)
             
     #  Initialization for parameters
-    def param_initialization(self, m):
-        torch.manual_seed(self.retrain) # fix the seed
-        
+    def param_initialization(self, m):        
         if type(m) == nn.Linear:
             #### calculate gain 
             if self.activation_str == "tanh" or self.activation_str == "relu":
@@ -329,13 +322,9 @@ class FNN_LN(nn.Module):
             torch.nn.init.zeros_(m.bias.data)
 
     def forward(self, x):
-        x = activation(self.linears[0](x), self.activation_str)
-        
+        x = activation(self.activation_str)(self.linears[0](x))
         for i in range(1, len(self.layers) - 2):
-            x = activation(
-                    self.linears[i](
-                        self.layer_norm[i-1](x) ), self.activation_str)
-        
+            x = activation(self.activation_str)(self.linears[i](self.layer_norm[i-1](x)))
         return self.linears[-1](x)   
 
 #########################################
@@ -370,7 +359,7 @@ class DeepONet(nn.Module):
         elif self.arc_b == "FNN_BN":
             self.branch  = FNN_BN(self.layer_b, self.act_b, self.init_b)
         elif arc_b == "FNN_LN":
-            self.branch  = FNN_LN(self.layers_b, self.act_b, self.init_b)
+            self.branch  = FNN_LN(self.layer_b, self.act_b, self.init_b)
         elif self.arc_b == "ResNet":
             self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
 
@@ -379,7 +368,7 @@ class DeepONet(nn.Module):
         elif self.arc_t == "FNN_BN":
             self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t)
         elif arc_t == "FNN_LN":
-            self.trunk  = FNN_LN(self.layers_t, self.act_t, self.init_t)
+            self.trunk  = FNN_LN(self.layer_t, self.act_t, self.init_t)
             
         # Final bias
         self.b = nn.parameter.Parameter(torch.tensor(0.0))

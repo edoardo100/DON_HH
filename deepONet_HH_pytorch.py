@@ -92,9 +92,6 @@ plotting = config["plotting"]
 #########################################
 if __name__=="__main__":
 
-    dataname = dataset_train 
-    dataname_test = dataset_test 
-    
     labels      = False
     full_v_data = False
 
@@ -109,8 +106,8 @@ if __name__=="__main__":
               "trunk"  : initial_t}
     
     # Load dataset
-    u_train, x_train, v_train, scale_fac, _ = load_train(dataname,scaling,labels,full_v_data,shuffle=True)
-    u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
+    u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
+    u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
 
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
@@ -145,7 +142,7 @@ if __name__=="__main__":
     #    myloss = H1relLoss()
     t1 = default_timer()
     # Unscaled dataset (for plotting)
-    u_test_unscaled, x_unscaled, v_test_unscaled = load_test(dataname_test)
+    u_test_unscaled, x_unscaled, v_test_unscaled = load_test(dataset_test)
     # Same order of scaled data
     u_test_unscaled = u_test_unscaled[indices]
     v_test_unscaled = v_test_unscaled[indices]
@@ -186,15 +183,15 @@ if __name__=="__main__":
                 out = model.forward((v,x_test))      
                 
                 # rescaling to compute the test error
-                if scaling == "Default":
-                    out = unscale_data(out.to(mydevice),scale_fac[0],scale_fac[1])
-                    u = unscale_data(u.to(mydevice),scale_fac[0],scale_fac[1])
-                elif scaling == "Gaussian":
-                    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
-                    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
-                elif scaling == "Mixed":
-                    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
-                    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
+                #if scaling == "Default":
+                #    out = unscale_data(out.to(mydevice),scale_fac[0],scale_fac[1])
+                #    u = unscale_data(u.to(mydevice),scale_fac[0],scale_fac[1])
+                #elif scaling == "Gaussian":
+                #    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
+                #    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
+                #elif scaling == "Mixed":
+                #    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
+                #    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
                     
                 test_l2 += L2relLoss()(out, u).item()
                 test_mse += MSE()(out, u).item()
