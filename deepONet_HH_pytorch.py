@@ -39,7 +39,7 @@ torch.set_default_dtype(torch.float32) # default tensor dtype
 
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="default_params_new.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="beta_test_006.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
 # Read the configuration from the specified YAML file
@@ -125,8 +125,8 @@ if __name__=="__main__":
     print("Total DeepONet parameters: ", par_tot)
     writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
-    # Adam optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr = lr, weight_decay = 1e-4)
+    # AdamW optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = 1e-4)
     # lr policy
     if scheduler == "StepLR":
         # halved the learning rate every 100 epochs
@@ -162,10 +162,7 @@ if __name__=="__main__":
             out = model.forward((v,x_train)) # compute the output
             
             # compute the loss
-            if Loss == 'L2' or Loss == 'mse':
-                loss = myloss(out.view(batch_size, -1), u.view(batch_size, -1))
-            elif Loss == 'H1':
-                loss = myloss(out, u)
+            loss = myloss(out, u)
                 
             loss.backward() # automatic back propagation
             optimizer.step()
@@ -199,8 +196,8 @@ if __name__=="__main__":
                     out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
                     u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
                     
-                test_l2 += L2relLoss()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
-                test_mse += MSE()(out.view(batch_size, -1), u.view(batch_size, -1)).item()
+                test_l2 += L2relLoss()(out, u).item()
+                test_mse += MSE()(out, u).item()
                 #test_h1 += H1relLoss()(out, u).item()
                 
         train_loss /= u_train.shape[0]

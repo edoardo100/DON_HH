@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from tensorboardX import SummaryWriter
+import multiprocessing
 # library for reading data
 import scipy.io
 # timer for plotting
@@ -23,6 +24,12 @@ import argparse
 # default value
 #########################################
 mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+if mydevice == 'cuda':
+    n_workers = torch.cuda.device_count() # number of GPUs
+    print(f"Number of GPUs: {n_workers}")
+if mydevice == 'cpu':
+    n_workes = multiprocessing.cpu_count() # number of cpu's cores
+    print(f"Number of CPU cores: {n_workers}")
 ## Metal GPU acceleration on Mac OSX
 ## NOT WORKING since ComplexFloat and Float64 is not supported by the MPS backend
 ## It isn't worth to force the conversion since we have cuda machine for test 
@@ -39,7 +46,7 @@ torch.set_default_tensor_type(torch.FloatTensor) # default tensor dtype
 #########################################
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="default_params_max.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="test_143_1.yml", help="Path to the YAML configuration file")
 # default_params_max <-- parametri di dafault (check retro-compatibility)
 args = parser.parse_args()
 
@@ -288,7 +295,7 @@ class FNN(nn.Module):
         # linear layers
         self.linears = nn.ModuleList(
             [nn.Linear(self.layers[i], self.layers[i+1]) 
-            for i in range( len(self.layers) - 2 )])
+            for i in range( len(self.layers) - 1 )])
     
     def forward(self,x):
         for linear in self.linears[:-1]:
@@ -316,10 +323,10 @@ class FNN_BN(nn.Module):
             [ nn.Linear(self.layers[i], self.layers[i+1]) 
               for i in range( len(self.layers) - 1 ) ])
         
-        # batch normalization applied in hidden layers
+        # batch normalization apllied in hidden layers
         self.batch_norm = nn.ModuleList(
             [ nn.BatchNorm1d(self.layers[i], device = mydevice)
-              for i in range(1, len(self.layers) - 1) ])
+              for i in range(1, len(self.layers) - 2) ])
 
         self.linears.apply(self.param_initialization)
             
@@ -344,7 +351,7 @@ class FNN_BN(nn.Module):
                 torch.nn.init.xavier_uniform_(m.weight.data, gain = gain)
                 
             elif self.initialization_str == "xavier_normal":
-                torch.nn.init.xavier_noraml_(m.weight.data, gain = gain)
+                torch.nn.init.xavier_normal_(m.weight.data, gain = gain)
                 
             elif self.initialization_str == "kaiming_uniform":
                 torch.nn.init.kaiming_uniform_(m.weight.data, 
@@ -361,10 +368,82 @@ class FNN_BN(nn.Module):
     def forward(self, x):
         x = activation(self.linears[0](x), self.activation_str)
         
-        for i in range(1, len(self.layers) - 1):
+        for i in range(1, len(self.layers) - 2):
             x = activation(
                     self.linears[i](
                         self.batch_norm[i-1](x) ), self.activation_str)
+        
+        return self.linears[-1](x)
+    
+#########################################
+# FNN_LN class
+#########################################         
+class FNN_LN(nn.Module):
+
+    def __init__(self, layers, activation_str, initialization_str):
+        super().__init__()
+        self.layers = layers # list with the number of neurons for each layer
+        self.activation_str = activation_str
+        self.retrain = retrain
+        self.initialization_str = initialization_str
+        
+        # fix the seed for retrain
+        torch.manual_seed(self.retrain)
+        
+        # linear layers
+        self.linears = nn.ModuleList(
+            [ nn.Linear(self.layers[i], self.layers[i+1]) 
+              for i in range( len(self.layers) - 1 ) ])
+        
+        # batch normalization apllied in hidden layers
+        self.layer_norm = nn.ModuleList(
+            [ nn.LayerNorm(self.layers[i], device = mydevice)
+              for i in range(1, len(self.layers) - 2) ])
+
+        self.linears.apply(self.param_initialization)
+            
+    #  Initialization for parameters
+    def param_initialization(self, m):
+        torch.manual_seed(self.retrain) # fix the seed
+        
+        if type(m) == nn.Linear:
+            #### calculate gain 
+            if self.activation_str == "tanh" or self.activation_str == "relu":
+                gain = nn.init.calculate_gain(self.activation_str)
+                a = 0
+            elif self.activation_str == "leaky_relu":
+                gain = nn.init.calculate_gain(self.activation_str, 0.01)
+                a = 0.01
+            else:
+                gain = 1
+                a = 0.01
+            
+            #### weights initialization
+            if self.initialization_str == "xavier_uniform":
+                torch.nn.init.xavier_uniform_(m.weight.data, gain = gain)
+                
+            elif self.initialization_str == "xavier_normal":
+                torch.nn.init.xavier_normal_(m.weight.data, gain = gain)
+                
+            elif self.initialization_str == "kaiming_uniform":
+                torch.nn.init.kaiming_uniform_(m.weight.data, 
+                                               a = a, 
+                                               nonlinearity = self.activation_str)
+                
+            elif self.initialization_str == "kaiming_normal":
+                torch.nn.init.kaiming_normal_(m.weight.data, 
+                                               a = a, 
+                                               nonlinearity = self.activation_str)
+            #### bias initialization
+            torch.nn.init.zeros_(m.bias.data)
+
+    def forward(self, x):
+        x = activation(self.linears[0](x), self.activation_str)
+        
+        for i in range(1, len(self.layers) - 2):
+            x = activation(
+                    self.linears[i](
+                        self.layer_norm[i-1](x) ), self.activation_str)
         
         return self.linears[-1](x)
 
@@ -386,11 +465,15 @@ class DeepONet(nn.Module):
             self.branch  = FNN(self.layers_b, self.act_b)
         elif arc_b == "FNN_BN":
             self.branch  = FNN_BN(self.layers_b, self.act_b, self.init_b)
+        elif arc_b == "FNN_LN":
+            self.branch  = FNN_LN(self.layers_b, self.act_b, self.init_b)
             
         if arc_t == "FNN":
             self.trunk   = FNN(self.layers_t, self.act_t)
         elif arc_t == "FNN_BN":
             self.trunk  = FNN_BN(self.layers_t, self.act_t, self.init_t)
+        elif arc_t == "FNN_LN":
+            self.trunk  = FNN_LN(self.layers_t, self.act_t, self.init_t)
             
         # Final bias
         self.b = torch.nn.Parameter(torch.tensor(0.), requires_grad = True)
@@ -470,7 +553,7 @@ if __name__ == '__main__':
     print("Total DeepONet parameters: ", par_tot)
     writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
-    # Adam optimizer
+    # AdamW optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = weight_decay)
     
     # lr policy
@@ -527,7 +610,7 @@ if __name__ == '__main__':
             for a, u in test_loader:
                 a, u = a.to(mydevice), u.to(mydevice)
     
-                out = model.forward(a, tspan_test)    
+                out = model.forward(a,tspan_test)    
                 # out = scale_data(out, 0, 1, u_data_min, u_data_max)
                 # u = scale_data(u, 0, 1, u_data_min, u_data_max)
                 

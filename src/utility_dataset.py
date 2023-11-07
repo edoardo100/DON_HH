@@ -115,70 +115,77 @@ def load_single_train(dataname,scaling="None",labels=False,full_v_data=False):
 Load train: to merge different datasets
 """
 def load_train(dataname, scaling=None, labels=False, full_v_data=False, shuffle=False):
-    # Initialize empty lists to store the data
-    all_u_data = []
-    all_v_data = []
-    scale_fac  = []
-    x_data = None  # Initialize x_data
+    if isinstance(dataname,list):
+        # Initialize empty lists to store the data
+        all_u_data = []
+        all_v_data = []
+        scale_fac  = []
+        x_data = None  # Initialize x_data
 
-    for data in dataname:
-        u_data, x_data, v_data, _ = load_single_train(data,labels=labels)
-        # Append u_data and v_data to the lists
-        all_u_data.append(u_data)
-        all_v_data.append(v_data)
+        for data in dataname:
+            u_data, x_data, v_data, _ = load_single_train(data,labels=labels)
+            # Append u_data and v_data to the lists
+            all_u_data.append(u_data)
+            all_v_data.append(v_data)
 
-    # Stack the lists of tensors to form a single tensor
-    all_u_data = torch.cat(all_u_data, dim=0)
-    all_v_data = torch.cat(all_v_data, dim=0)
-    v_data1   = all_v_data[:,0:2]   # pulse times
-    v_data2   = all_v_data[:,[2]]   # pulse intensities
+        # Stack the lists of tensors to form a single tensor
+        all_u_data = torch.cat(all_u_data, dim=0)
+        all_v_data = torch.cat(all_v_data, dim=0)
+        v_data1   = all_v_data[:,0:2]   # pulse times
+        v_data2   = all_v_data[:,[2]]   # pulse intensities
 
-    if scaling == "Default":
-        u_max, u_min, all_u_data = scale_data(all_u_data,0.0,1.0)
-        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
-        v_max1, v_min1, v_data1 = scale_data(v_data1,0.0,1.0)
-        v_max2, v_min2, v_data2 = scale_data(v_data2,0.0,1.0)
-        scale_fac = [u_max,u_min,x_max,x_min,v_max1,v_min1,v_max2,v_min2]
-    elif scaling == "Gaussian":
-        u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
-        x_mean, x_std, x_data = gaussian_scale(x_data)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
-        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
-        scale_fac = [u_mean,u_std,x_mean,x_std,v_mean1,v_std1,v_mean2,v_std2]
-    elif scaling == "Mixed":
-        u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
-        x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
-        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
-        scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
-    elif scaling == "Fourier": 
-        # scaling used for FNO: x_data is not scaled
-        u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
-        x_min, x_max = torch.min(x_data), torch.max(x_data)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
-        v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
-        scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
+        if scaling == "Default":
+            u_max, u_min, all_u_data = scale_data(all_u_data,0.0,1.0)
+            x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
+            v_max1, v_min1, v_data1 = scale_data(v_data1,0.0,1.0)
+            v_max2, v_min2, v_data2 = scale_data(v_data2,0.0,1.0)
+            scale_fac = [u_max,u_min,x_max,x_min,v_max1,v_min1,v_max2,v_min2]
+        elif scaling == "Gaussian":
+            u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
+            x_mean, x_std, x_data = gaussian_scale(x_data)
+            v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+            v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
+            scale_fac = [u_mean,u_std,x_mean,x_std,v_mean1,v_std1,v_mean2,v_std2]
+        elif scaling == "Mixed":
+            u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
+            x_max, x_min, x_data = scale_data(x_data,0.0,1.0)
+            v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+            v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
+            scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
+        elif scaling == "Fourier": 
+            # scaling used for FNO: x_data is not scaled
+            u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
+            x_min, x_max = torch.min(x_data), torch.max(x_data)
+            v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+            v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
+            scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
 
-    # Variant for v_data
-    if full_v_data and labels:
-        raise NotImplementedError("Full v and labels data is not implemented yet.")
-    elif full_v_data:
-        domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
-        all_v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
-        all_v_data = all_v_data*v_data2
-    elif labels:
-        v_labels   = all_v_data[:,[3]]
-        all_v_data = torch.cat((v_data1,v_data2,v_labels),axis=1) 
+        # Variant for v_data
+        if full_v_data and labels:
+            raise NotImplementedError("Full v and labels data is not implemented yet.")
+        elif full_v_data:
+            domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
+            all_v_data = torch.where((domain >= v_data1[:, [0]]) & (domain <= v_data1[:, [1]]), 1.0, 0.0)
+            all_v_data = all_v_data*v_data2
+        elif labels:
+            v_labels   = all_v_data[:,[3]]
+            all_v_data = torch.cat((v_data1,v_data2,v_labels),axis=1) 
+        else:
+            all_v_data = torch.cat((v_data1,v_data2),axis=1)
+
+        # shuffle data
+        if shuffle:
+            indices = torch.randperm(all_u_data.shape[0])
+            all_u_data = all_u_data[indices]
+            all_v_data = all_v_data[indices]
+            return all_u_data, x_data, all_v_data, scale_fac, indices
+        
     else:
-        all_v_data = torch.cat((v_data1,v_data2),axis=1)
-
-    # shuffle data
-    if shuffle:
-        indices = torch.randperm(all_u_data.shape[0])
-        all_u_data = all_u_data[indices]
-        all_v_data = all_v_data[indices]
-        return all_u_data, x_data, all_v_data, scale_fac, indices
-
+        all_u_data, x_data, all_v_data, scale_fac = load_single_train(dataname,scaling,labels,full_v_data)
+        if shuffle:
+            indices = [i for i in range(all_u_data.shape[0])]
+            return all_u_data, x_data, all_v_data, scale_fac, indices
+        
     return all_u_data, x_data, all_v_data, scale_fac
 
 """
@@ -231,27 +238,33 @@ def load_single_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_da
     return u_data, x_data.t(), v_data
 
 def load_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_data=False,shuffle=False):
-    # Initialize empty lists to store the data
-    all_u_data = []
-    all_v_data = []
-    x_data = None  # Initialize x_data
+    if isinstance(dataname,list):
+        # Initialize empty lists to store the data
+        all_u_data = []
+        all_v_data = []
+        x_data = None  # Initialize x_data
 
-    for data in dataname:
-        u_data, x_data, v_data = load_single_test(data,scale_fac,scaling,labels,full_v_data)
-        # Append u_data and v_data to the lists
-        all_u_data.append(u_data)
-        all_v_data.append(v_data)
+        for data in dataname:
+            u_data, x_data, v_data = load_single_test(data,scale_fac,scaling,labels,full_v_data)
+            # Append u_data and v_data to the lists
+            all_u_data.append(u_data)
+            all_v_data.append(v_data)
 
-    # Stack the lists of tensors to form a single tensor
-    all_u_data = torch.cat(all_u_data, dim=0)
-    all_v_data = torch.cat(all_v_data, dim=0)
+        # Stack the lists of tensors to form a single tensor
+        all_u_data = torch.cat(all_u_data, dim=0)
+        all_v_data = torch.cat(all_v_data, dim=0)
 
-   # shuffle data
-    if shuffle:
-        indices = torch.randperm(all_u_data.shape[0])
-        all_u_data = all_u_data[indices]
-        all_v_data = all_v_data[indices]
-        return all_u_data, x_data, all_v_data, indices
+        # shuffle data
+        if shuffle:
+            indices = torch.randperm(all_u_data.shape[0])
+            all_u_data = all_u_data[indices]
+            all_v_data = all_v_data[indices]
+            return all_u_data, x_data, all_v_data, indices
+    else:
+        all_u_data, x_data, all_v_data = load_single_test(dataname,scale_fac,scaling,labels,full_v_data)
+        if shuffle:
+            indices = [i for i in range(all_u_data.shape[0])]
+            return all_u_data, x_data, all_v_data, indices
 
     return all_u_data, x_data, all_v_data
 
@@ -274,12 +287,16 @@ if __name__=="__main__":
                 "dataset/datasetHH_test_5peaks_test.mat",
                 "dataset/datasetHH_test_6peaks_test.mat"]
     
-    scaling     = "None"
+    dataname = "dataset/datasetHH_test_5peaks.mat"
+               
+    dataname_test = "dataset/datasetHH_test_5peaks_test.mat"
+                
+    scaling     = "Default"
     labels      = True
     full_v_data = False
     shuffle     = True
 
     u_train, x_train, v_train, scale_fac, indices = load_train(dataname,scaling,labels,full_v_data,shuffle)
     #u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle)
-    u_test, x_test, v_test = load_test(dataname_test)
+    u_test, x_test, v_test = load_test(dataname_test,scale_fac,scaling=scaling)
     print("Effettuato")
