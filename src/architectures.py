@@ -328,15 +328,55 @@ class FNN_LN(nn.Module):
         return self.linears[-1](x)   
 
 #########################################
+# TimeDistributed-like class, for porting of myGRU
+# https://discuss.pytorch.org/t/any-pytorch-function-can-work-as-keras-timedistributed/1346/4
+#########################################
+class TimeDistributed(nn.Module):
+    def __init__(self, module, batch_first=False):
+        super(TimeDistributed, self).__init__()
+        self.module = module
+        self.batch_first = batch_first
+
+    def forward(self, x):
+
+        if len(x.size()) <= 2:
+            return self.module(x)
+
+        # Squash samples and timesteps into a single axis
+        x_reshape = x.contiguous().view(-1, x.size(-1))  # (samples * timesteps, input_size)
+
+        y = self.module(x_reshape)
+
+        # We have to reshape Y
+        if self.batch_first:
+            y = y.contiguous().view(x.size(0), -1, y.size(-1))  # (samples, timesteps, output_size)
+        else:
+            y = y.view(-1, x.size(1), y.size(-1))  # (timesteps, samples, output_size)
+
+        return y
+
+#########################################
 # myGRU class
 #########################################
 class myGRU(nn.Module):
-    def __init__(self,input_size):
+    def __init__(self):
         super().__init__()
-        self.gru = nn.Sequential(
-                      nn.GRU(input_size=input_size,hidden_size=256),
-                      nn.GRU(input_size=256,hidden_size=128),
-                   )
+        self.gru1 = nn.GRU(input_size=1,hidden_size=256,batch_first=True)
+        self.gru2 = nn.GRU(input_size=256,hidden_size=128,batch_first=True)
+        self.gru3 = nn.GRU(input_size=128,hidden_size=128,batch_first=True)
+        self.gru4 = nn.GRU(input_size=128,hidden_size=256,batch_first=True)
+        self.TimeDistributed = TimeDistributed(nn.Linear(256,1),batch_first=True)
+
+    def forward(self,x):
+        x = x.reshape(x.shape[0],x.shape[1],1)
+        x, _ = self.gru1(x)
+        x, _ = self.gru2(x)
+        x, _ = self.gru3(x)
+        x, _ = self.gru4(x)
+        x    = self.TimeDistributed(x)
+        x    = torch.flatten(x,start_dim=1)
+        return x
+        
 
 #########################################
 # DeepONet class
@@ -362,6 +402,10 @@ class DeepONet(nn.Module):
             self.branch  = FNN_LN(self.layer_b, self.act_b, self.init_b)
         elif self.arc_b == "ResNet":
             self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
+        elif arc_b == "GRU":
+            self.branch = myGRU()
+        else:
+            raise NotImplementedError("Architecture for branch not implemented yet.")
 
         if self.arc_t == "FNN":
             self.trunk   = FNN(self.layer_t, self.act_t, self.init_t)
@@ -369,6 +413,8 @@ class DeepONet(nn.Module):
             self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t)
         elif arc_t == "FNN_LN":
             self.trunk  = FNN_LN(self.layer_t, self.act_t, self.init_t)
+        else:
+            raise NotImplementedError("Architecture for trunk not implemented yet.")
             
         # Final bias
         self.b = nn.parameter.Parameter(torch.tensor(0.0))
@@ -387,3 +433,11 @@ class DeepONet(nn.Module):
         # add bias
         out += self.b
         return out
+
+# main for testing classes and functions
+if __name__=="__main__":
+
+    a = torch.rand(2000,101)
+    model = myGRU()
+    out = model(a)
+    print('out.shape = ', out.shape)

@@ -39,7 +39,7 @@ torch.set_default_dtype(torch.float32) # default tensor dtype
 
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="beta_test_006.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="default_params_new.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
 # Read the configuration from the specified YAML file
@@ -64,6 +64,8 @@ dataset_train = config["dataset_train"]
 dataset_test  = config["dataset_test"]
 batch_size    = config["batch_size"]
 scaling       = config["scaling"]
+labels        = config["labels"]      # default False
+full_v_data   = config["full_v_data"] # default False
 weights_norm  = config["weights_norm"]
 adapt_actfun  = config["adapt_actfun"]
 scheduler     = config["scheduler"]
@@ -91,9 +93,6 @@ plotting = config["plotting"]
 #                 MAIN
 #########################################
 if __name__=="__main__":
-
-    labels      = False
-    full_v_data = False
 
     writer = SummaryWriter(log_dir = name_log_dir )
     
