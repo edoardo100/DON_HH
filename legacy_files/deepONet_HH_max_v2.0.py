@@ -46,7 +46,7 @@ torch.set_default_tensor_type(torch.FloatTensor) # default tensor dtype
 #########################################
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="default_params.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="test_143_1.yml", help="Path to the YAML configuration file")
 # default_params_max <-- parametri di dafault (check retro-compatibility)
 args = parser.parse_args()
 
@@ -89,6 +89,7 @@ gamma         = config["gamma"]
 u_dim         = config["u_dim"]
 x_dim         = config["x_dim"]
 N_FourierF    = config["N_FourierF"]
+scale_FF      = config["scale_FF"]
 G_dim         = config["G_dim"]
 exp_G         = config["exp_G"]
 inner_layer_b = config["inner_layer_b"]
@@ -237,15 +238,14 @@ def activation(x, activation_str):
 # FourierFeatures
 #########################################
 class FourierFeatures(nn.Module):
-
     def __init__(self, scale, mapping_size, device):
         super().__init__()
         self.mapping_size = mapping_size
         self.scale = scale
-        self.B = scale * torch.randn((self.mapping_size, 2)).to(device)
+        self.B = scale * torch.randn((self.mapping_size, 1)).to(device)
 
     def forward(self, x):
-        # x is the set of coordinate and it is passed as a tensor (nx, ny, 2)
+        # x is the set of coordinate and it is passed as a tensor (nt, 1)
         if self.scale != 0:
             x_proj = torch.matmul((2. * np.pi * x), self.B.T)
             inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
@@ -532,7 +532,7 @@ class DeepONet(nn.Module):
         # trunk network
         t_in = activation(self.trunk(t_in), self.act_t)
         # sclar product
-        out = torch.einsum("ij,kj->ik",b_in,t_in)
+        out = torch.einsum("ij,kj->ik", b_in, t_in)
         # add final bias
         out += self.b     
         return out
@@ -568,6 +568,11 @@ if __name__ == '__main__':
         a_normalizer = UnitGaussianNormalizer(a_train)
         a_train_pp = a_normalizer.encode(a_train) # pp = PostProcessed
         a_test_pp = a_normalizer.encode(a_test)
+        
+    #### Fourier Features expansion
+    if N_FourierF > 0:
+        tspan_train = FourierFeatures(scale_FF, N_FourierF, tspan_train.device)(tspan_test)
+        tspan_test = FourierFeatures(scale_FF, N_FourierF, tspan_test.device)(tspan_test)
     
     #### batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_train_pp, u_train),
@@ -582,7 +587,7 @@ if __name__ == '__main__':
     ################################################################
     #### DeepONet parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
-              "trunk"  : [x_dim + N_FourierF] + inner_layer_t + [G_dim] }
+              "trunk"  : [x_dim*(N_FourierF == 0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
     activ  = {"branch" : activation_b,
               "trunk"  : activation_t}
     
@@ -621,12 +626,12 @@ if __name__ == '__main__':
         #### One epoch of training
         model.train()
         train_loss = 0
-        for step, (a, u) in enumerate(train_loader):
+        for a, u in train_loader:
             a, u = a.to(mydevice), u.to(mydevice)
             
             optimizer.zero_grad() # annealing the gradient
             
-            out = model.forward(a, tspan_train) # compute the outpu
+            out = model.forward(a, tspan_train) # compute the output
             
             # compute the loss
             loss = myloss(out, u)
@@ -682,6 +687,7 @@ if __name__ == '__main__':
         if ep == 0:
             #### initial value of a
             esempio_test = a_test[idx, :].to('cpu')
+            esempio_test_pp = a_train_pp[idx, :].to('cpu')
             
             X = np.linspace(0, 100, esempio_test.shape[1])
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
@@ -698,7 +704,7 @@ if __name__ == '__main__':
             writer.add_figure('Applied current (I_app)', fig, 0)
 
             #### Approximate classical solution
-            soluzione_test = u_test[idx]
+            soluzione_test = u_train[idx]
             # soluzione_test = scale_data(soluzione_test, 0, 1, u_data_min, u_data_max).to('cpu')
             X = np.linspace(0, 100, soluzione_test.shape[1])
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))
@@ -715,7 +721,7 @@ if __name__ == '__main__':
         #### approximate solution with FNO of HH model
         if ep % ep_step == 0:
             with torch.no_grad():  # no grad for effeciency reason
-                out_test = model(esempio_test.to(mydevice), tspan_test)
+                out_test = model(esempio_test_pp.to(mydevice), tspan_test)
                 # out_test = scale_data(out_test, 0, 1, u_data_min, u_data_max)
                 out_test = out_test.to('cpu')
 
