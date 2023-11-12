@@ -241,17 +241,17 @@ class FourierFeatures(nn.Module):
     def __init__(self, scale, mapping_size, device):
         super().__init__()
         self.mapping_size = mapping_size
+        if scale == 0:
+            raise ValueError("scale cannot be zero.")
         self.scale = scale
-        self.B = scale * torch.randn((self.mapping_size, 1)).to(device)
+        self.B = self.scale * torch.randn((self.mapping_size, 1)).to(device)
 
     def forward(self, x):
         # x is the set of coordinate and it is passed as a tensor (nt, 1)
-        if self.scale != 0:
-            x_proj = torch.matmul((2. * np.pi * x), self.B.T)
-            inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
-            return inp
-        else:
-            return x
+        x_proj = torch.matmul((2. * np.pi * x), self.B.T)
+        inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
+        
+        return inp
 
 #########################################
 # loss function
@@ -539,7 +539,7 @@ class DeepONet(nn.Module):
 
 if __name__ == '__main__':
     # to save the data
-    writer = SummaryWriter(log_dir = name_log_dir )
+    writer = SummaryWriter(log_dir = name_log_dir)
     # available device
     print('Available device:', mydevice)
     
@@ -738,7 +738,7 @@ if __name__ == '__main__':
                 plt.show()
             writer.add_figure('FNO approximation (V_m)', fig, ep)
 
-            #### Module of the difference between classical anf FNO approximation
+            #### Module of the difference between classical and FNO approximation
             diff = torch.abs(out_test - soluzione_test)
             # X = np.linspace(0, 1, diff.shape[1])
             fig, ax = plt.subplots(1, n_idx, figsize = (18, 4))

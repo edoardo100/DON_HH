@@ -8,7 +8,7 @@ Learning Hodgkin-Huxley model with DeepONet
 """
 # internal modules
 from src.utility_dataset import *
-from src.architectures import L2relLoss, MSE, DeepONet
+from src.architectures import L2relLoss, MSE, DeepONet, FourierFeatures
 # external modules
 import torch
 from timeit import default_timer
@@ -66,6 +66,8 @@ batch_size    = config["batch_size"]
 scaling       = config["scaling"]
 labels        = config["labels"]      # default False
 full_v_data   = config["full_v_data"] # default False
+N_FourierF    = config["N_FourierF"]
+scale_FF      = config["scale_FF"]
 weights_norm  = config["weights_norm"]
 adapt_actfun  = config["adapt_actfun"]
 scheduler     = config["scheduler"]
@@ -107,6 +109,13 @@ if __name__=="__main__":
     # Load dataset
     u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
     u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
+    
+    #### Fourier Features expansion
+    if N_FourierF > 0:
+        x_train = torch.cat((x_train, 
+                                 FourierFeatures(scale_FF, N_FourierF, x_train.device)(x_train)), dim = 1)
+        x_test = torch.cat((x_test, 
+                                 FourierFeatures(scale_FF, N_FourierF, x_test.device)(x_test)), dim = 1) 
 
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
@@ -114,7 +123,7 @@ if __name__=="__main__":
     test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
                                               batch_size = batch_size) 
     
-    model = DeepONet(layers,activ,init,arc_b,arc_t)
+    model = DeepONet(layers,activ,init,arc_b,arc_t,adapt_actfun)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
@@ -180,17 +189,6 @@ if __name__=="__main__":
                 v, u = v.to(mydevice), u.to(mydevice)
     
                 out = model.forward((v,x_test))      
-                
-                # rescaling to compute the test error
-                #if scaling == "Default":
-                #    out = unscale_data(out.to(mydevice),scale_fac[0],scale_fac[1])
-                #    u = unscale_data(u.to(mydevice),scale_fac[0],scale_fac[1])
-                #elif scaling == "Gaussian":
-                #    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
-                #    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
-                #elif scaling == "Mixed":
-                #    out = inverse_gaussian_scale(out.to(mydevice),scale_fac[0],scale_fac[1])
-                #    u = inverse_gaussian_scale(u.to(mydevice),scale_fac[0],scale_fac[1])
                     
                 test_l2 += L2relLoss()(out, u).item()
                 test_mse += MSE()(out, u).item()

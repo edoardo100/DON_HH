@@ -9,13 +9,17 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
+#########################################
+# activation functions and initializers
+#########################################
+
 def activation(act_fun):
     act_dict = {
         "ReLu"     : F.relu,
         "Tanh"     : F.tanh,
         "GELU"     : F.gelu,
         "Sigmoid"  : F.sigmoid,
-        "Sin"      : torch.sin,
+        "Sin"      : lambda x: torch.sin(2*torch.pi*x),
     }
     return act_dict[act_fun]
     
@@ -30,7 +34,26 @@ def initializer(initial):
     return initial_dict[initial]
 
 #########################################
-# activation functions and initializers
+# Fourier Features
+#########################################
+class FourierFeatures(nn.Module):
+    def __init__(self, scale, mapping_size, device):
+        super().__init__()
+        self.mapping_size = mapping_size
+        if scale == 0:
+            raise ValueError("scale cannot be zero.")
+        self.scale = scale
+        self.B = self.scale * torch.randn((self.mapping_size, 1)).to(device)
+
+    def forward(self, x):
+        # x is the set of coordinate and it is passed as a tensor (nt, 1)
+        x_proj = torch.matmul((2. * torch.pi * x), self.B.T)
+        inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
+        
+        return inp
+    
+#########################################
+# Adaptive Linear
 #########################################
 class AdaptiveLinear(nn.Linear):
     """Applies a linear transformation to the input data as follows
@@ -76,9 +99,8 @@ class AdaptiveLinear(nn.Linear):
 class L2relLoss():
     """ sum of relative L^2 error """        
     def rel(self, x, y):
-        num_examples = x.size()[0]
-        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
-        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
+        diff_norms = torch.norm(x - y, 2, 1)
+        y_norms = torch.norm(y, 2, 1)
         
         return torch.sum(diff_norms/y_norms)
     
@@ -88,8 +110,7 @@ class L2relLoss():
 class MSE():
     """ sum of relative L^2 error """        
     def mse(self, x, y):
-        num_examples = x.size()[0]
-        diff = torch.square(x.reshape(num_examples,-1) - y.reshape(num_examples,-1))
+        diff = torch.square(x - y)
         return torch.sum(diff)
     
     def __call__(self, x, y):
@@ -249,7 +270,7 @@ class FNN_BN(nn.Module):
 
         # Assembly the network
         for i in range(1,len(layer_sizes)):
-            self.linears.append(nn.Linear(layer_sizes[i-1],layer_sizes[i]))
+            self.linears.append(AdaptiveLinear(layer_sizes[i-1],layer_sizes[i],adaptive_rate=self.adapt_rate))
             self.batch_layer.append(nn.BatchNorm1d(layer_sizes[i])) # BN
             # Initialize the parameters
             self.initializer(self.linears[-1].weight,gain)
@@ -270,15 +291,18 @@ class FNN_BN(nn.Module):
 # FNN_LN class
 #########################################         
 class FNN_LN(nn.Module):
-    def __init__(self, layers, activation_str, initialization_str):
+    def __init__(self, layers, activation_str, initialization_str, adapt_actfun=False):
         super().__init__()
         self.layers = layers # list with the number of neurons for each layer
         self.activation_str = activation_str
         self.initialization_str = initialization_str
+        self.adapt_rate  = None
         
+        if adapt_actfun:
+            self.adapt_rate = 0.1
         # linear layers
         self.linears = nn.ModuleList(
-            [ nn.Linear(self.layers[i], self.layers[i+1]) 
+            [ AdaptiveLinear(self.layers[i],self.layers[i+1],adaptive_rate=self.adapt_rate) 
               for i in range( len(self.layers) - 1 ) ])
         
         # batch normalization apllied in hidden layers
@@ -382,7 +406,7 @@ class myGRU(nn.Module):
 # DeepONet class
 #########################################  
 class DeepONet(nn.Module):
-    def __init__(self, layers, activation_str, kernel_initializer, arc_b, arc_t):
+    def __init__(self, layers, activation_str, kernel_initializer, arc_b, arc_t, adapt_actfun=False):
         """ parameters are dictionaries """
         super().__init__()
         self.layer_b = layers["branch"]
@@ -393,13 +417,14 @@ class DeepONet(nn.Module):
         self.init_t  = kernel_initializer["trunk"]
         self.arc_b   = arc_b
         self.arc_t   = arc_t
+        self.adapt   = adapt_actfun
         
         if self.arc_b == "FNN":
-            self.branch  = FNN(self.layer_b, self.act_b, self.init_b)
+            self.branch  = FNN(self.layer_b, self.act_b, self.init_b, self.adapt)
         elif self.arc_b == "FNN_BN":
-            self.branch  = FNN_BN(self.layer_b, self.act_b, self.init_b)
+            self.branch  = FNN_BN(self.layer_b, self.act_b, self.init_b, self.adapt)
         elif arc_b == "FNN_LN":
-            self.branch  = FNN_LN(self.layer_b, self.act_b, self.init_b)
+            self.branch  = FNN_LN(self.layer_b, self.act_b, self.init_b, self.adapt)
         elif self.arc_b == "ResNet":
             self.branch  = ResNet(ResidualBlockCNN,[3,3,3,3])
         elif arc_b == "GRU":
@@ -408,11 +433,11 @@ class DeepONet(nn.Module):
             raise NotImplementedError("Architecture for branch not implemented yet.")
 
         if self.arc_t == "FNN":
-            self.trunk   = FNN(self.layer_t, self.act_t, self.init_t)
+            self.trunk   = FNN(self.layer_t, self.act_t, self.init_t, self.adapt)
         elif self.arc_t == "FNN_BN":
-            self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t)
+            self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t, self.adapt)
         elif arc_t == "FNN_LN":
-            self.trunk  = FNN_LN(self.layer_t, self.act_t, self.init_t)
+            self.trunk  = FNN_LN(self.layer_t, self.act_t, self.init_t, self.adapt)
         else:
             raise NotImplementedError("Architecture for trunk not implemented yet.")
             

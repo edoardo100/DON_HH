@@ -3,23 +3,29 @@
 #### Dataset parameters
 #dataname: "datasetHH_test1.mat"
 #split: 1600
-dataset_train: ["dataset/datasetHH_test_0peaks.mat",
-                "dataset/datasetHH_test_1peaks.mat",
-                "dataset/datasetHH_test_2peaks.mat",
-                "dataset/datasetHH_test_3peaks.mat",
-                "dataset/datasetHH_test_4peaks.mat",
-                "dataset/datasetHH_test_5peaks.mat",
-                "dataset/datasetHH_test_6peaks.mat"]
-dataset_test: ["dataset/datasetHH_test_0peaks_test.mat",
-                "dataset/datasetHH_test_1peaks_test.mat",
-                "dataset/datasetHH_test_2peaks_test.mat",
-                "dataset/datasetHH_test_3peaks_test.mat",
-                "dataset/datasetHH_test_4peaks_test.mat",
-                "dataset/datasetHH_test_5peaks_test.mat",
-                "dataset/datasetHH_test_6peaks_test.mat"]
+#dataset_train: ["dataset/datasetHH_test_0peaks.mat",
+#                "dataset/datasetHH_test_1peaks.mat",
+#                "dataset/datasetHH_test_2peaks.mat",
+#                "dataset/datasetHH_test_3peaks.mat",
+#                "dataset/datasetHH_test_4peaks.mat",
+#                "dataset/datasetHH_test_5peaks.mat",
+#                "dataset/datasetHH_test_6peaks.mat"]
+#dataset_test: ["dataset/datasetHH_test_0peaks_test.mat",
+#                "dataset/datasetHH_test_1peaks_test.mat",
+#                "dataset/datasetHH_test_2peaks_test.mat",
+#                "dataset/datasetHH_test_3peaks_test.mat",
+#                "dataset/datasetHH_test_4peaks_test.mat",
+#                "dataset/datasetHH_test_5peaks_test.mat",
+#                "dataset/datasetHH_test_6peaks_test.mat"]
+dataset_train: "dataset/datasetHH_test1_train.mat" 
+dataset_test: "dataset/datasetHH_test1_test.mat"
+labels: False
+full_v_data: False
+N_FourierF: 0   
+scale_FF: 0.001
 batch_size: 100
 #### Architecture parameters
-scaling: "Default" # Default, Gaussian, or Mixed
+scaling: "None" # Default, Gaussian, or Mixed
 weights_norm: "Xavier" # Xavier or Kaiming
 adapt_actfun: False
 scheduler: "StepLR"
@@ -28,13 +34,13 @@ epochs: 10000
 lr: 0.001
 u_dim: 3 # Input dimension for Branch Net
 x_dim: 1 # Input dimension for Trunk Net
-G_dim: 50 # Output dimension
+G_dim: 500 # Output dimension
 inner_layer_b: [500, 500, 500, 500]
-inner_layer_t: [500, 500, 500, 500]
+inner_layer_t: [500, 500]
 activation_b: "Tanh"
 activation_t: "Tanh"
-arc_b: "FNN"
-arc_t: "FNN"
+arc_b: "FNN_LN"
+arc_t: "FNN_LN"
 initial_b: "Glorot normal"
 initial_t: "Glorot normal"
 #### FNO parameters
