@@ -571,9 +571,10 @@ if __name__ == '__main__':
         
     #### Fourier Features expansion
     if N_FourierF > 0:
-        tspan_train = FourierFeatures(scale_FF, N_FourierF, tspan_train.device)(tspan_test)
-        tspan_test = FourierFeatures(scale_FF, N_FourierF, tspan_test.device)(tspan_test)
-    
+        tspan_train = torch.cat((tspan_train, 
+                                 FourierFeatures(scale_FF, N_FourierF, tspan_train.device)(tspan_train)), dim = 1)
+        tspan_test = torch.cat((tspan_test, 
+                                 FourierFeatures(scale_FF, N_FourierF, tspan_test.device)(tspan_test)), dim = 1)    
     #### batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(a_train_pp, u_train),
                                                 batch_size = batch_size)
@@ -587,7 +588,7 @@ if __name__ == '__main__':
     ################################################################
     #### DeepONet parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
-              "trunk"  : [x_dim*(N_FourierF == 0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
+              "trunk"  : [x_dim + 2*N_FourierF] + inner_layer_t + [G_dim] }
     activ  = {"branch" : activation_b,
               "trunk"  : activation_t}
     
