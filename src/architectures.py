@@ -37,13 +37,13 @@ def initializer(initial):
 # Fourier Features
 #########################################
 class FourierFeatures(nn.Module):
-    def __init__(self, scale, mapping_size, device):
+    def __init__(self, scale, mapping_size):
         super().__init__()
         self.mapping_size = mapping_size
         if scale == 0:
             raise ValueError("scale cannot be zero.")
         self.scale = scale
-        self.B = self.scale * torch.randn((self.mapping_size, 1)).to(device)
+        self.B = self.scale * torch.randn((self.mapping_size, 1))
 
     def forward(self, x):
         # x is the set of coordinate and it is passed as a tensor (nt, 1)
@@ -51,7 +51,23 @@ class FourierFeatures(nn.Module):
         inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
         
         return inp
-    
+
+#########################################
+# Adaptive Fourier Features
+#########################################
+class AdaptFF(nn.Module):
+    def __init__(self, mapping_size):
+        super().__init__()
+        self.mapping_size = mapping_size
+        self.B = nn.Parameter(torch.randn(self.mapping_size,1))
+
+    def forward(self, x):
+        # x is the set of coordinate and it is passed as a tensor (nt, 1)
+        x_proj = torch.matmul((2. * torch.pi * x), self.B.T)
+        inp = torch.cat([torch.sin(x_proj), torch.cos(x_proj)], axis=-1)
+
+        return inp
+
 #########################################
 # Adaptive Linear
 #########################################
@@ -438,6 +454,15 @@ class DeepONet(nn.Module):
             self.trunk  = FNN_BN(self.layer_t, self.act_t, self.init_t, self.adapt)
         elif arc_t == "FNN_LN":
             self.trunk  = FNN_LN(self.layer_t, self.act_t, self.init_t, self.adapt)
+        elif arc_t == "FourierFeatures":
+            self.mapping_size = 10 # number of fourier modes
+            self.scale = 1
+            self.trunk = nn.Sequential(FourierFeatures(self.scale, self.mapping_size),
+                                       FNN_LN(self.layer_t, self.act_t, self.init_t, self.adapt))
+        elif arc_t == "AdaptFF":
+            self.mapping_size = 10 # number of fourier modes
+            self.trunk = nn.Sequential(AdaptFF(self.mapping_size),
+                                       FNN_LN(self.layer_t, self.act_t, self.init_t, self.adapt))
         else:
             raise NotImplementedError("Architecture for trunk not implemented yet.")
             

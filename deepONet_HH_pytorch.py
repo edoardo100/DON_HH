@@ -100,7 +100,7 @@ if __name__=="__main__":
     
     #### Network parameters
     layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
-              "trunk"  : [x_dim] + inner_layer_t + [G_dim] }
+              "trunk"  : [x_dim*(N_FourierF==0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
     activ  = {"branch" : activation_b,
               "trunk"  : activation_t}
     init   = {"branch" : initial_b,
@@ -109,14 +109,7 @@ if __name__=="__main__":
     # Load dataset
     u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
     u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
-    
-    #### Fourier Features expansion
-    if N_FourierF > 0:
-        x_train = torch.cat((x_train, 
-                                 FourierFeatures(scale_FF, N_FourierF, x_train.device)(x_train)), dim = 1)
-        x_test = torch.cat((x_test, 
-                                 FourierFeatures(scale_FF, N_FourierF, x_test.device)(x_test)), dim = 1) 
-
+        
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
                                                 batch_size = batch_size)
@@ -173,12 +166,12 @@ if __name__=="__main__":
             optimizer.step()
             if scheduler == "CosineAnnealingLR":
                 scheduler.step()
-                
+
             train_loss += loss.item() # update the loss function
             
         if scheduler == "StepLR":
             scheduler.step()
-        
+
         #### Evaluate the model on the test set
         model.eval()
         test_l2  = 0.0
