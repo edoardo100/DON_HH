@@ -31,18 +31,18 @@ def unscale_data(scaled_data, original_max, original_min):
     unscaled_data = scaled_data * (original_max - original_min) + original_min
     return unscaled_data
 
-def gaussian_scale(data):
+def gaussian_scale(data, eps=1e-5):
     mean = torch.mean(data)
     std_dev = torch.std(data)
-    scaled_data = (data - mean) / std_dev
+    scaled_data = (data - mean) / (std_dev + eps)
     return mean, std_dev, scaled_data
 
-def gaussian_scale_for_test(data,mean,std_dev):
-    scaled_data = (data - mean) / std_dev
+def gaussian_scale_for_test(data, mean, std_dev, eps=1e-5):
+    scaled_data = (data - mean) / (std_dev + eps)
     return scaled_data
 
-def inverse_gaussian_scale(scaled_data, original_mean, original_std_dev): 
-    unscaled_data = scaled_data * original_std_dev + original_mean
+def inverse_gaussian_scale(scaled_data, original_mean, original_std_dev, eps=1e-5): 
+    unscaled_data = scaled_data * (original_std_dev + eps) + original_mean
     return unscaled_data
 
 """
@@ -90,9 +90,9 @@ def load_single_train(dataname,scaling="None",labels=False,full_v_data=False):
         scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
     elif scaling == "Fourier": 
         # scaling used for FNO: x_data is not scaled
-        u_mean, u_std, u_data = gaussian_scale(u_data)
-        x_min, x_max = torch.min(x_data), torch.max(x_data)
-        v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+        u_mean, u_std = torch.mean(u_data), torch.std(u_data)
+        x_min,  x_max = torch.min(x_data), torch.max(x_data)
+        # v_mean1, v_std1, v_data1 = gaussian_scale(v_data1) # pulse times are not scaled
         v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
         scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
 
@@ -154,9 +154,8 @@ def load_train(dataname, scaling=None, labels=False, full_v_data=False, shuffle=
             scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
         elif scaling == "Fourier": 
             # scaling used for FNO: x_data is not scaled
-            u_mean, u_std, all_u_data = gaussian_scale(all_u_data)
-            x_min, x_max = torch.min(x_data), torch.max(x_data)
-            v_mean1, v_std1, v_data1 = gaussian_scale(v_data1)
+            u_mean, u_std = torch.mean(u_data), torch.std(u_data)
+            x_min,  x_max = torch.min(x_data), torch.max(x_data)
             v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
             scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
 
@@ -217,9 +216,7 @@ def load_single_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_da
         v_data1 = gaussian_scale_for_test(v_data1,scale_fac[4],scale_fac[5])
         v_data2 = gaussian_scale_for_test(v_data2,scale_fac[6],scale_fac[7])
     elif scaling == "Fourier": 
-        # scaling used for FNO: x_data is not scaled
-        u_data = gaussian_scale_for_test(u_data,scale_fac[0],scale_fac[1])
-        v_data1 = gaussian_scale_for_test(v_data1,scale_fac[4],scale_fac[5])
+        # scaling used for FNO: u_data and x_data are not scaled
         v_data2 = gaussian_scale_for_test(v_data2,scale_fac[6],scale_fac[7])
         
     # Variant for v_data

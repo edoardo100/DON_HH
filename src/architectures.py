@@ -484,6 +484,7 @@ class DeepONet(nn.Module):
         out += self.b
         return out
 
+
 # main for testing classes and functions
 if __name__=="__main__":
 
