@@ -92,6 +92,7 @@ def load_single_train(dataname,scaling="None",labels=False,full_v_data=False):
         # scaling used for FNO: x_data is not scaled
         u_mean, u_std = torch.mean(u_data), torch.std(u_data)
         x_min,  x_max = torch.min(x_data), torch.max(x_data)
+        v_mean1, v_std1 = torch.mean(v_data1), torch.std(v_data1)
         # v_mean1, v_std1, v_data1 = gaussian_scale(v_data1) # pulse times are not scaled
         v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
         scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
@@ -156,6 +157,7 @@ def load_train(dataname, scaling=None, labels=False, full_v_data=False, shuffle=
             # scaling used for FNO: x_data is not scaled
             u_mean, u_std = torch.mean(u_data), torch.std(u_data)
             x_min,  x_max = torch.min(x_data), torch.max(x_data)
+            v_mean1, v_std1 = torch.mean(v_data1), torch.std(v_data1)
             v_mean2, v_std2, v_data2 = gaussian_scale(v_data2)
             scale_fac = [u_mean,u_std,x_max,x_min,v_mean1,v_std1,v_mean2,v_std2]
 

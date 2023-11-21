@@ -17,15 +17,18 @@
 #                "dataset/datasetHH_test_4peaks_test.mat",
 #                "dataset/datasetHH_test_5peaks_test.mat",
 #                "dataset/datasetHH_test_6peaks_test.mat"]
+arc: "FNO"
+level: 6
+width: 48
 dataset_train: "dataset/datasetHH_test1_train.mat" 
 dataset_test: "dataset/datasetHH_test1_test.mat"
 labels: False
-full_v_data: False
+full_v_data: True
 N_FourierF: 10   
 scale_FF: 1
 batch_size: 100
 #### Architecture parameters
-scaling: "None" # Default, Gaussian, or Mixed
+scaling: "None" # Default, Gaussian, Mixed or Fourier
 weights_norm: "Xavier" # Xavier or Kaiming
 adapt_actfun: False
 scheduler: "StepLR"
@@ -44,12 +47,18 @@ arc_t: "AdaptFF"
 initial_b: "Glorot normal"
 initial_t: "Glorot normal"
 #### FNO parameters
-fun_actFNO: "ReLu"
-scalar: "Real"
-arc: "Classic"
-L: 4
-d_v: 1
-modes: 32
+d_a            : 2 
+d_v            : 32
+d_u            : 1
+L              : 4
+modes          : 16
+act_fun        : "ReLu"
+initialization : "Kaiming"
+scalar         : "Real" 
+padding        : True
+arc_fno        : "Classic"
+x_padding      : 10
+RNN            : True 
 #### Plotting and tensorboard
 ep_step: 20
 idx: [7, 42, 45, 15] # random test sample

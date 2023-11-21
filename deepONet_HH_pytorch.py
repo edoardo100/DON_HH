@@ -8,11 +8,12 @@ Learning Hodgkin-Huxley model with DeepONet
 """
 # internal modules
 from src.utility_dataset import *
-from src.architectures import L2relLoss, MSE, DeepONet, FourierFeatures
+from src.architectures import L2relLoss, MSE, DeepONet
+from src.wno import WNO1d
+from src.fno import FNO1d
 # external modules
 import torch
 from timeit import default_timer
-import scipy.io as sio
 # for test launcher interface
 import os
 import yaml
@@ -60,6 +61,7 @@ name_model = 'model_' + param_file_name
 #########################################
 # DeepONet's hyperparameter
 #########################################
+arc           = config["arc"]
 dataset_train = config["dataset_train"]
 dataset_test  = config["dataset_test"]
 batch_size    = config["batch_size"]
@@ -90,6 +92,22 @@ ep_step  = config["ep_step"]
 idx      = config["idx"]
 n_idx    = len(idx)
 plotting = config["plotting"]
+#### WNO parameters
+width = config["width"]
+level = config["level"]
+#### FNO parameters
+d_a = config["d_a"]
+d_v = config["d_v"]
+d_u = config["d_u"]
+L = config["L"]
+modes = config["modes"]
+act_fun = config["act_fun"]
+initialization = config["initialization"]
+scalar = config["scalar"]
+padding = config["padding"]
+arc_fno = config["arc_fno"]
+x_padding = config["x_padding"]
+RNN = config["RNN"]
 
 #########################################
 #                 MAIN
@@ -116,7 +134,18 @@ if __name__=="__main__":
     test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
                                               batch_size = batch_size) 
     
-    model = DeepONet(layers,activ,init,arc_b,arc_t,adapt_actfun)
+    model = None
+    if arc=="DON":
+        model = DeepONet(layers,activ,init,arc_b,arc_t,adapt_actfun)
+    elif arc=="WNO":
+        if full_v_data==False:
+            raise ValueError("full_v_data must be true")
+        dummy = torch.rand(1,2,x_train.size(0))
+        model = WNO1d(width,level,dummy)
+    elif arc=="FNO":
+        if full_v_data==False:
+            raise ValueError("full_v_data must be true")
+        model = FNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
@@ -128,7 +157,7 @@ if __name__=="__main__":
     # lr policy
     if scheduler == "StepLR":
         # halved the learning rate every 100 epochs
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 10000, gamma = 0.5)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 100, gamma = 0.5)
     if scheduler == "CosineAnnealingLR":
         # Cosine Annealing Scheduler (SGD with warm restart)
         iterations = epochs*(u_train.shape[0]//batch_size)
@@ -193,7 +222,7 @@ if __name__=="__main__":
         #test_h1 /= u_test.shape[0]
     
         t2 = default_timer()
-        if ep%100==0:
+        if ep%1==0:
             print('Epoch:', ep, 'Time:', t2-t1,
                   'Train_loss_'+Loss+':', train_loss, 'Test_loss_l2:', test_l2,
                   'Test_mse:', test_mse, 
