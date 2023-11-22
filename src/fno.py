@@ -1,8 +1,17 @@
+"""
+fno.py
+
+author: Massimiliano Ghiotto
+modified by: Edoardo Centofanti
+
+classes relative to Fourier Neural Operator
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from functools import partial
-from src.architectures import activation
+from .architectures import MLP, activation
 
 #########################################
 # fourier layer
@@ -98,23 +107,6 @@ class FourierLayer(nn.Module):
             out_ft = torch.complex(out_ft[..., 0], out_ft[..., 1]) # return to complex values
         # Return to physical space
         x = torch.fft.irfft(out_ft, n=x.size(-1))
-        return x
-    
-#########################################
-# MLP
-#########################################
-class MLP(nn.Module):
-    """ shallow neural network """
-    def __init__(self, in_channels, out_channels, mid_channels, act_fun="ReLu"):
-        super(MLP, self).__init__()
-        self.mlp1 = nn.Linear(in_channels, mid_channels)
-        self.mlp2 = nn.Linear(mid_channels, out_channels)
-        self.activation = activation(act_fun)
-
-    def forward(self, x):
-        x = self.mlp1(x) # affine transformation
-        x = self.activation(x) # activation function
-        x = self.mlp2(x) # affine transformation
         return x
     
 #########################################

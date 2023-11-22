@@ -1,0 +1,32 @@
+#### EXAMPLE OF yml FILE FOR FOURIER NEURAL OPERATOR
+#### Dataset parameters
+arc: "FNO"
+dataset_train: "dataset/datasetHH_test1_train.mat" 
+dataset_test: "dataset/datasetHH_test1_test.mat"
+labels: False
+full_v_data: True
+batch_size: 100
+#### Architecture parameters
+scaling: "None" # Default, Gaussian, Mixed or Fourier
+scheduler: "StepLR"
+Loss: "L2" # mse or L2
+epochs: 10000
+lr: 0.001
+#### FNO parameters
+d_a            : 2 
+d_v            : 32
+d_u            : 1
+L              : 4
+modes          : 16
+act_fun        : "ReLu"
+initialization : "Kaiming"
+scalar         : "Real" 
+padding        : True
+arc_fno        : "Classic"
+x_padding      : 10
+RNN            : False
+#### Plotting and tensorboard
+show_every: 1 
+ep_step: 20
+idx: [7, 42, 45, 15] # random test sample
+plotting: False

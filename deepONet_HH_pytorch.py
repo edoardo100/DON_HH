@@ -8,7 +8,8 @@ Learning Hodgkin-Huxley model with DeepONet
 """
 # internal modules
 from src.utility_dataset import *
-from src.architectures import L2relLoss, MSE, DeepONet
+from src.architectures import L2relLoss, MSE
+from src.don import DeepONet
 from src.wno import WNO1d
 from src.fno import FNO1d
 # external modules
@@ -40,7 +41,7 @@ torch.set_default_dtype(torch.float32) # default tensor dtype
 
 # Define command-line arguments
 parser = argparse.ArgumentParser(description="Learning Hodgkin-Huxley model with DeepONet")
-parser.add_argument("--config_file", type=str, default="default_params_new.yml", help="Path to the YAML configuration file")
+parser.add_argument("--config_file", type=str, default="default_params_don.yml", help="Path to the YAML configuration file")
 args = parser.parse_args()
 
 # Read the configuration from the specified YAML file
@@ -61,53 +62,53 @@ name_model = 'model_' + param_file_name
 #########################################
 # DeepONet's hyperparameter
 #########################################
-arc           = config["arc"]
-dataset_train = config["dataset_train"]
-dataset_test  = config["dataset_test"]
-batch_size    = config["batch_size"]
-scaling       = config["scaling"]
-labels        = config["labels"]      # default False
-full_v_data   = config["full_v_data"] # default False
-N_FourierF    = config["N_FourierF"]
-scale_FF      = config["scale_FF"]
-weights_norm  = config["weights_norm"]
-adapt_actfun  = config["adapt_actfun"]
-scheduler     = config["scheduler"]
-Loss          = config["Loss"]
-epochs        = config["epochs"]
-lr            = config["lr"]
-u_dim         = config["u_dim"]
-x_dim         = config["x_dim"]
-G_dim         = config["G_dim"]
-inner_layer_b = config["inner_layer_b"]
-inner_layer_t = config["inner_layer_t"]
-activation_b  = config["activation_b"]
-activation_t  = config["activation_t"]
-arc_b         = config["arc_b"] 
-arc_t         = config["arc_t"] 
-initial_b     = config["initial_b"]
-initial_t     = config["initial_t"]
-#### Plotting parameters
-ep_step  = config["ep_step"]
-idx      = config["idx"]
-n_idx    = len(idx)
-plotting = config["plotting"]
+arc           = config.get("arc")
+dataset_train = config.get("dataset_train")
+dataset_test  = config.get("dataset_test")
+batch_size    = config.get("batch_size")
+scaling       = config.get("scaling")
+labels        = config.get("labels")      # default False
+full_v_data   = config.get("full_v_data") # default False
+N_FourierF    = config.get("N_FourierF")
+scale_FF      = 1  # config.get("scale_FF")
+adapt_actfun  = config.get("adapt_actfun")
+scheduler     = config.get("scheduler")
+Loss          = config.get("Loss")
+epochs        = config.get("epochs")
+lr            = config.get("lr")
+u_dim         = config.get("u_dim")
+x_dim         = config.get("x_dim")
+G_dim         = config.get("G_dim")
+inner_layer_b = config.get("inner_layer_b")
+inner_layer_t = config.get("inner_layer_t")
+activation_b  = config.get("activation_b")
+activation_t  = config.get("activation_t")
+arc_b         = config.get("arc_b")
+arc_t         = config.get("arc_t") 
+initial_b     = config.get("initial_b")
+initial_t     = config.get("initial_t")
 #### WNO parameters
-width = config["width"]
-level = config["level"]
+width = config.get("width")
+level = config.get("level")
 #### FNO parameters
-d_a = config["d_a"]
-d_v = config["d_v"]
-d_u = config["d_u"]
-L = config["L"]
-modes = config["modes"]
-act_fun = config["act_fun"]
-initialization = config["initialization"]
-scalar = config["scalar"]
-padding = config["padding"]
-arc_fno = config["arc_fno"]
-x_padding = config["x_padding"]
-RNN = config["RNN"]
+d_a = config.get("d_a")
+d_v = config.get("d_v")
+d_u = config.get("d_u")
+L = config.get("L")
+modes = config.get("modes")
+act_fun = config.get("act_fun")
+initialization = config.get("initialization")
+scalar = config.get("scalar")
+padding = config.get("padding")
+arc_fno = config.get("arc_fno")
+x_padding = config.get("x_padding")
+RNN = config.get("RNN")
+#### Plotting parameters
+show_every = config.get("show_every")
+ep_step    = config.get("ep_step")
+idx        = config.get("idx")
+n_idx      = len(idx)
+plotting   = config.get("plotting")
 
 #########################################
 #                 MAIN
@@ -117,12 +118,15 @@ if __name__=="__main__":
     writer = SummaryWriter(log_dir = name_log_dir )
     
     #### Network parameters
-    layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
-              "trunk"  : [x_dim*(N_FourierF==0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
-    activ  = {"branch" : activation_b,
-              "trunk"  : activation_t}
-    init   = {"branch" : initial_b,
-              "trunk"  : initial_t}
+    layers, activ, init = None, None, None
+
+    if arc=="DON":
+        layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
+                  "trunk"  : [x_dim*(N_FourierF==0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
+        activ  = {"branch" : activation_b,
+                  "trunk"  : activation_t}
+        init   = {"branch" : initial_b,
+                  "trunk"  : initial_t}
     
     # Load dataset
     u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
@@ -222,7 +226,7 @@ if __name__=="__main__":
         #test_h1 /= u_test.shape[0]
     
         t2 = default_timer()
-        if ep%1==0:
+        if ep % show_every == 0:
             print('Epoch:', ep, 'Time:', t2-t1,
                   'Train_loss_'+Loss+':', train_loss, 'Test_loss_l2:', test_l2,
                   'Test_mse:', test_mse, 

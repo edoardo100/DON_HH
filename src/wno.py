@@ -2,6 +2,8 @@
 This code is extracted from the paper:
 -- Tripura, T., & Chakraborty, S. (2022). Wavelet neural operator: a neural 
    operator for parametric partial differential equations. arXiv preprint arXiv:2205.02191.
+
+modified by: Edoardo Centofanti
 """
 
 import numpy as np
