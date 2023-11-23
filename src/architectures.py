@@ -14,21 +14,23 @@ import torch.nn as nn
 #########################################
 
 def activation(act_fun):
+    act_fun = act_fun.lower()
     act_dict = {
-        "ReLu"     : F.relu,
-        "Tanh"     : F.tanh,
-        "GELU"     : F.gelu,
-        "Sigmoid"  : F.sigmoid,
-        "Sin"      : lambda x: torch.sin(2*torch.pi*x),
+        "relu"     : F.relu,
+        "tanh"     : F.tanh,
+        "gelu"     : F.gelu,
+        "sigmoid"  : F.sigmoid,
+        "sin"      : lambda x: torch.sin(2*torch.pi*x),
     }
     return act_dict[act_fun]
     
 def initializer(initial):
+    initial = initial.lower()
     initial_dict = {
-        "Glorot normal": torch.nn.init.xavier_normal_,
-        "Glorot uniform": torch.nn.init.xavier_uniform_,
-        "He normal": torch.nn.init.kaiming_normal_,
-        "He uniform": torch.nn.init.kaiming_uniform_,
+        "glorot normal": torch.nn.init.xavier_normal_,
+        "glorot uniform": torch.nn.init.xavier_uniform_,
+        "he normal": torch.nn.init.kaiming_normal_,
+        "he uniform": torch.nn.init.kaiming_uniform_,
         "zeros": torch.nn.init.zeros_,
     }
     return initial_dict[initial]
@@ -41,7 +43,7 @@ class FourierFeatures(nn.Module):
         super().__init__()
         self.mapping_size = mapping_size
         if scale == 0:
-            raise ValueError("scale cannot be zero.")
+            raise ValueError("Scale cannot be zero.")
         self.scale = scale
         self.B = self.scale * torch.randn((self.mapping_size, 1))
 
