@@ -10,7 +10,7 @@ batch_size: 100
 scaling: "None" # Default, Gaussian, Mixed or Fourier
 scheduler: "StepLR"
 Loss: "L2" # mse or L2
-epochs: 10000
+epochs: 2000
 lr: 0.001
 #### FNO parameters
 d_a            : 2 

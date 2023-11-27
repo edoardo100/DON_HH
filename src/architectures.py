@@ -10,7 +10,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 #########################################
-# activation functions and initializers
+# Utilities
 #########################################
 
 def activation(act_fun):
@@ -34,6 +34,30 @@ def initializer(initial):
         "zeros": torch.nn.init.zeros_,
     }
     return initial_dict[initial]
+
+def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size):
+    # AdamW optimizer
+    optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = 1e-4)
+    # lr policy
+    scheduler = None
+    if schedulerName is not None:
+        if schedulerName.lower() == "steplr":
+            # halved the learning rate every 100 epochs
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 100, gamma = 0.5)
+        elif schedulerName.lower() == "cosineannealinglr":
+            # Cosine Annealing Scheduler (SGD with warm restart)
+            iterations = epochs*(ntrain//batch_size)
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = iterations)
+        elif schedulerName.lower() == "reduceonplateau":
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.9,
+                                        patience=10, threshold=0.001, threshold_mode='rel', cooldown=0, 
+                                        min_lr=0, eps=1e-08, verbose=True) 
+        else:
+            raise ValueError("This scheduler has not been implemented yet.")
+    else:
+        schedulerName = "None"
+
+    return optimizer, schedulerName, scheduler
 
 #########################################
 # Fourier Features
@@ -129,9 +153,15 @@ class MLP(nn.Module):
         return x
 
 #########################################
-# loss function
+# Loss functions
 #########################################
 class L2relLoss():
+    def __init__(self):
+        self.name = "L2_rel"
+
+    def get_name(self):
+        return self.name
+        
     """ sum of relative L^2 error """        
     def rel(self, x, y):
         diff_norms = torch.norm(x - y, 2, 1)
@@ -143,6 +173,12 @@ class L2relLoss():
         return self.rel(x, y)
     
 class MSE():
+    def __init__(self):
+        self.name = "mse"
+
+    def get_name(self):
+        return self.name
+    
     """ sum of relative L^2 error """        
     def mse(self, x, y):
         diff = torch.square(x - y)
@@ -150,6 +186,52 @@ class MSE():
     
     def __call__(self, x, y):
         return self.mse(x, y)
+
+class H1relLoss():
+    def __init__(self):
+        self.name = "H1_rel"
+    
+    def get_name(self):
+        return self.name
+    
+    """ Relative H^1 = W^{1,2} norm, in the equivalent Fourier formulation """
+    def rel(self, x, y, size_mean):
+        num_examples = x.size()[0]
+        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
+        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
+        if size_mean:
+            return torch.mean(diff_norms/y_norms)
+        else:
+            return torch.sum(diff_norms/y_norms)
+
+    def __call__(self, x, y, beta = 1, size_mean = False):
+        n_t = x.size(1) 
+        # index
+        k = torch.cat((torch.arange(start = 0, end = n_t//2, step = 1),
+                       torch.arange(start = -n_t//2, end = 0, step = 1)), 
+                       0).reshape(1, n_t)
+        k = torch.abs(k)
+
+        # compute Fourier modes
+        x = torch.fft.fft(x, dim = 1)
+        y = torch.fft.fft(y, dim = 1)
+        
+        weight = 1 + beta*k**2 
+        weight = torch.sqrt(weight)
+        loss = self.rel(x*weight, y*weight, size_mean)
+
+        return loss
+
+def get_loss(Loss):
+    if Loss == "L2":
+        myloss = L2relLoss()
+    elif Loss == "mse":
+        myloss = MSE()
+    elif Loss == 'H1':
+        myloss = H1relLoss()
+    else:
+        raise ValueError("Invalid Loss type provided.")
+    return myloss
 
 #########################################
 # ResNet-CNN class
