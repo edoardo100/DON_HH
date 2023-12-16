@@ -5,7 +5,7 @@ dataset_test: "dataset/datasetHH_test1_test.mat"
 arc: "DON"
 labels: False
 full_v_data: False
-N_FourierF: 0   # olny for arc_t with fourier features
+N_FourierF: 0   # only for arc_t with fourier features
 batch_size: 100
 #### Architecture parameters
 scaling: "None"        # Default, Gaussian, Mixed or Fourier
