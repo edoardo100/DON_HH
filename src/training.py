@@ -38,6 +38,7 @@ class Training():
             # Unscaled dataset (for plotting)
             if "LR" in self.dataset_test:
                 u_test_unscaled, x_test_unscaled, v_test_unscaled, _ = load_LR_test(dataset_test,full_v_data=True)
+                v_test_unscaled = v_test_unscaled[:,0,:]
             else:
                 u_test_unscaled, x_test_unscaled, v_test_unscaled = load_test(dataset_test,full_v_data=True)
             # Same order of scaled data

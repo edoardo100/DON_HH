@@ -134,7 +134,7 @@ class FNO1d(nn.Module):
            depth of FNO
           
         modes : int
-            pari a k_{max, 1}
+            equal to k_{max, 1}
         
         act_fun: string
             act_fun function
@@ -188,11 +188,19 @@ class FNO1d(nn.Module):
             self.q = MLP(d_v, d_u, 4*d_u)
 
     def forward(self, x):
-        # preprocessing 
-        v, x = x[0], x[1]
-        v = v.unsqueeze(-1)
-        x = x.reshape(1,x.size(0),1).repeat([v.size(0), 1, 1])
-        x = torch.cat((v,x),dim=-1) 
+        # preprocessing
+        if self.d_a==2: 
+            v, x = x[0], x[1]
+            v = v.unsqueeze(-1)
+            x = x.reshape(1,x.size(0),1).repeat([v.size(0), 1, 1])
+            x = torch.cat((v,x),dim=-1)
+        elif self.d_a==3:
+            v, x = x[0], x[1]
+            v = v.permute(0, 2, 1)
+            x = x.reshape(1,x.size(0),1).repeat([v.size(0), 1, 1])
+            x = torch.cat((v,x),dim=-1)
+        else:
+            raise ValueError("d_a dimension invalid.") 
 
         # initially x.size() = (n_samples)*(n_t)*(d_a)
         

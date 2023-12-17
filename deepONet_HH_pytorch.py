@@ -127,8 +127,8 @@ if __name__=="__main__":
     
     # Load dataset
     if "LR" in dataset_train:
-        u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train)
-        u_test, x_test, v_test, indices = load_LR_test(dataset_test)
+        u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train,full_v_data)
+        u_test, x_test, v_test, indices = load_LR_test(dataset_test,full_v_data)
     else:
         u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
         u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)

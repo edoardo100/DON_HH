@@ -283,6 +283,7 @@ def load_LR_train(dataname,full_v_data=False):
         v_data = torch.where((domain >= 0) & (domain <= 10), 1.0, 0.0)
         v_data = v_data*v_data1
         v_conc = torch.where(domain >= 0, 1.0, 0.0)*v_data2 # for concentrations
+        v_data = torch.cat((v_data.unsqueeze(1),v_conc.unsqueeze(1)),axis=1)
     else:
         v_data = torch.cat((v_data1,v_data2),axis=1)
 
@@ -300,6 +301,7 @@ def load_LR_test(dataname,full_v_data=False):
         v_data = torch.where((domain >= 0) & (domain <= 10), 1.0, 0.0)
         v_data = v_data*v_data1
         v_conc = torch.where(domain >= 0, 1.0, 0.0)*v_data2 # for concentrations
+        v_data = torch.cat((v_data.unsqueeze(1),v_conc.unsqueeze(1)),axis=1)
     else:
         v_data = torch.cat((v_data1,v_data2),axis=1)
 
@@ -336,5 +338,5 @@ if __name__=="__main__":
     #u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle)
     #u_test, x_test, v_test = load_test(dataname_test,scale_fac,scaling=scaling)
     u_train, x_train, v_train, scale_fac = load_LR_train(dataname)
-    u_test, x_test, v_test = load_LR_test(dataname_test,full_v_data)
+    u_test, x_test, v_test, _ = load_LR_test(dataname_test,full_v_data)
     print("Effettuato")
