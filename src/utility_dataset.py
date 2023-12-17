@@ -268,34 +268,73 @@ def load_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_data=Fals
     return all_u_data, x_data, all_v_data
 
 
+"""
+Functions for LR dataset
+"""
+def load_LR_train(dataname,full_v_data=False):
+    d         = sio.loadmat(dataname)
+    u_data    = torch.tensor(d['vs'][:1600,:]).float()
+    x_data    = torch.tensor(d['tspan']).float()
+    v_data1   = (torch.tensor(d['iapps'])[:1600,[0]]).float()   # pulse intensities
+    v_data2   = (torch.tensor(d['iapps'])[:1600,[1]]).float()   # potassium concentration
+    scale_fac = [] # dummy, just for compatibility
+    if full_v_data:
+        domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
+        v_data = torch.where((domain >= 0) & (domain <= 10), 1.0, 0.0)
+        v_data = v_data*v_data1
+        v_conc = torch.where(domain >= 0, 1.0, 0.0)*v_data2 # for concentrations
+    else:
+        v_data = torch.cat((v_data1,v_data2),axis=1)
+
+    return u_data, x_data.t(), v_data, scale_fac    
+
+def load_LR_test(dataname,full_v_data=False):
+    d         = sio.loadmat(dataname)
+    u_data    = torch.tensor(d['vs'][1600:,:]).float()
+    x_data    = torch.tensor(d['tspan']).float()
+    v_data1   = (torch.tensor(d['iapps'])[1600:,[0]]).float()   # pulse intensities
+    v_data2   = (torch.tensor(d['iapps'])[1600:,[1]]).float()   # potassium concentration
+    indices = [i for i in range(u_data.shape[0])]
+    if full_v_data:
+        domain = x_data.flatten().repeat(v_data1.shape[0], x_data.shape[0])
+        v_data = torch.where((domain >= 0) & (domain <= 10), 1.0, 0.0)
+        v_data = v_data*v_data1
+        v_conc = torch.where(domain >= 0, 1.0, 0.0)*v_data2 # for concentrations
+    else:
+        v_data = torch.cat((v_data1,v_data2),axis=1)
+
+    return u_data, x_data.t(), v_data, indices    
+
 """ main for test """
 if __name__=="__main__":
-    dataname = ["dataset/datasetHH_test_0peaks.mat",
-                "dataset/datasetHH_test_1peaks.mat",
-                "dataset/datasetHH_test_2peaks.mat",
-                "dataset/datasetHH_test_3peaks.mat",
-                "dataset/datasetHH_test_4peaks.mat",
-                "dataset/datasetHH_test_5peaks.mat",
-                "dataset/datasetHH_test_6peaks.mat"]
+    #dataname = ["dataset/datasetHH_test_0peaks.mat",
+               # "dataset/datasetHH_test_1peaks.mat",
+               # "dataset/datasetHH_test_2peaks.mat",
+               # "dataset/datasetHH_test_3peaks.mat",
+               # "dataset/datasetHH_test_4peaks.mat",
+               # "dataset/datasetHH_test_5peaks.mat",
+               # "dataset/datasetHH_test_6peaks.mat"]
     
-    dataname_test = ["dataset/datasetHH_test_0peaks_test.mat",
-                "dataset/datasetHH_test_1peaks_test.mat",
-                "dataset/datasetHH_test_2peaks_test.mat",
-                "dataset/datasetHH_test_3peaks_test.mat",
-                "dataset/datasetHH_test_4peaks_test.mat",
-                "dataset/datasetHH_test_5peaks_test.mat",
-                "dataset/datasetHH_test_6peaks_test.mat"]
+    #dataname_test = ["dataset/datasetHH_test_0peaks_test.mat",
+                    #"dataset/datasetHH_test_1peaks_test.mat",
+                    #"dataset/datasetHH_test_2peaks_test.mat",
+                    #"dataset/datasetHH_test_3peaks_test.mat",
+                    #"dataset/datasetHH_test_4peaks_test.mat",
+                    #"dataset/datasetHH_test_5peaks_test.mat",
+                    #"dataset/datasetHH_test_6peaks_test.mat"]
     
-    dataname = "dataset/datasetHH_test_5peaks.mat"
+    dataname = "dataset/datasetLR91_interp500.mat"
                
-    dataname_test = "dataset/datasetHH_test_5peaks_test.mat"
+    dataname_test = "dataset/datasetLR91_interp500.mat"
                 
     scaling     = "Default"
     labels      = True
-    full_v_data = False
+    full_v_data = True
     shuffle     = True
 
-    u_train, x_train, v_train, scale_fac, indices = load_train(dataname,scaling,labels,full_v_data,shuffle)
+    #u_train, x_train, v_train, scale_fac, indices = load_train(dataname,scaling,labels,full_v_data,shuffle)
     #u_test, x_test, v_test, indices = load_test(dataname_test,scale_fac,scaling,labels,full_v_data,shuffle)
-    u_test, x_test, v_test = load_test(dataname_test,scale_fac,scaling=scaling)
+    #u_test, x_test, v_test = load_test(dataname_test,scale_fac,scaling=scaling)
+    u_train, x_train, v_train, scale_fac = load_LR_train(dataname)
+    u_test, x_test, v_test = load_LR_test(dataname_test,full_v_data)
     print("Effettuato")

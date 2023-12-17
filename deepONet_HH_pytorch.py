@@ -126,8 +126,12 @@ if __name__=="__main__":
                   "trunk"  : initial_t}
     
     # Load dataset
-    u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
-    u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
+    if "LR" in dataset_train:
+        u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train)
+        u_test, x_test, v_test, indices = load_LR_test(dataset_test)
+    else:
+        u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
+        u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
         
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
