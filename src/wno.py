@@ -86,7 +86,7 @@ class WNO1d(nn.Module):
         self.width = width
         self.dummy_data = dummy_data
         self.padding = 2 # pad the domain if input is non-periodic
-        self.fc0 = nn.Linear(2, self.width)
+        self.fc0 = nn.Linear(dummy_data.shape[1], self.width)
 
         self.conv0 = WaveConv1d(self.width, self.width, self.level, self.dummy_data, 'db24')
         self.conv1 = WaveConv1d(self.width, self.width, self.level, self.dummy_data, 'db24')
@@ -106,7 +106,10 @@ class WNO1d(nn.Module):
 
         # preprocessing 
         v, x = x[0], x[1]
-        v = v.unsqueeze(-1)
+        if len(v.shape)==2:
+            v = v.unsqueeze(-1)
+        else:
+            v = v.permute(0, 2, 1)
         x = x.reshape(1,x.size(0),1).repeat([v.size(0), 1, 1])
         x = torch.cat((v,x),dim=-1)  
 

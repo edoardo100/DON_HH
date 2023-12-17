@@ -145,7 +145,10 @@ if __name__=="__main__":
     elif arc=="WNO":
         if full_v_data==False:
             raise ValueError("full_v_data must be true")
-        dummy = torch.rand(1,2,x_train.size(0))
+        if "LR" in dataset_train:
+            dummy = torch.rand(1,3,x_train.size(0))
+        else:
+            dummy = torch.rand(1,2,x_train.size(0))
         model = WNO1d(width,level,dummy)
     elif arc=="FNO":
         if full_v_data==False:

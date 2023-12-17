@@ -1,7 +1,9 @@
 #### EXAMPLE OF yml FILE FOR WAVELET NEURAL OPERATOR
 #### Dataset parameters
-dataset_train: "dataset/datasetHH_test1_train.mat" 
-dataset_test: "dataset/datasetHH_test1_test.mat"
+#dataset_train: "dataset/datasetHH_test1_train.mat" 
+#dataset_test: "dataset/datasetHH_test1_test.mat"
+dataset_train: "dataset/datasetLR91_interp500.mat" 
+dataset_test: "dataset/datasetLR91_interp500.mat" 
 labels: False
 full_v_data: True
 batch_size: 100
