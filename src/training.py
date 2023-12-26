@@ -102,6 +102,7 @@ class Training():
         esempio_test    = v_test_unscaled[idx, :].to('cpu')
         esempio_test_pp = self.v_test[idx, :].to('cpu')
         sol_test        = u_test_unscaled[idx]
+        x_test_unscaled = x_test_unscaled.to('cpu')
         if ep == 0:
             fig, ax = plt.subplots(1, len(idx), figsize = (18, 4))
             fig.suptitle('Applied current (I_app)')

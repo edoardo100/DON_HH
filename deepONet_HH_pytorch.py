@@ -26,6 +26,7 @@ from tensorboardX import SummaryWriter
 # default value
 #########################################
 mydevice = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+#mydevice = 'cpu'
 ## Metal GPU acceleration on Mac OSX
 ## NOT WORKING since ComplexFloat and Float64 is not supported by the MPS backend
 ## It isn't worth to force the conversion since we have cuda machine for test 
@@ -186,6 +187,7 @@ if __name__=="__main__":
         idx=idx,
         writer=writer,
         ep_step=ep_step,
+	device=mydevice,
         show_every=show_every
     )
 
