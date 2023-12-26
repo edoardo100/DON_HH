@@ -61,7 +61,7 @@ class Training():
                 if self.schedulerName.lower() == "cosineannealinglr":
                     self.scheduler.step()
                 train_loss += loss.item() # update the loss function
-            if self.schedulerName.lower() == "steplr" or self.schedulerName.lower() == "reduceonplateau":
+            if self.schedulerName.lower() == "steplr":
                 self.scheduler.step()
             #### Evaluate the model on the test set
             self.model.eval()
@@ -80,6 +80,9 @@ class Training():
             test_l2/= self.ntest
             test_mse/= self.ntest
             test_h1/= self.ntest
+
+            if self.schedulerName.lower() == "reduceonplateau":
+                self.scheduler.step(test_l2)
 
             t2 = default_timer()
             if ep % self.show_every == 0:
