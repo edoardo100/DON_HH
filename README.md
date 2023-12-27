@@ -10,3 +10,9 @@ File and folders:
 ## Usage:
 
 `python3 deepONet_HH_pytorch.py --config_file <yml_file.yml>`
+
+### To recover trained models:
+
+`python3 recover_model.py --config_file <yml_file.yml>`
+
+please change lines in the code indicating the new indexes to predict (idx) and the model path (modelname)
