@@ -12,8 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pytorch_wavelets import DWT1D, IDWT1D
 
-torch.manual_seed(0)
-np.random.seed(0)
+#torch.manual_seed(0)
+#np.random.seed(0)
 
 """ Def: 1d Wavelet layer """
 class WaveConv1d(nn.Module):

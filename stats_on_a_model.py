@@ -13,6 +13,7 @@ from src.don import DeepONet
 from src.wno import WNO1d
 from src.fno import FNO1d
 from src.training import Training
+from src.architectures import L2relLoss
 # external modules
 import torch
 # for test launcher interface
@@ -114,9 +115,7 @@ plotting   = config.get("plotting")
 #########################################
 if __name__=="__main__":
     # [159, 69, 258, 309]
-    idx = torch.randint(low=0, high=400, size=(4,))
-    idx = torch.tensor([278, 69, 258, 309])
-    print("indexes to print = "+str(idx))
+    idx = torch.tensor([i for i in range(400)])
     # Load dataset
     if "LR" in dataset_train:
         u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train,full_v_data)
@@ -146,35 +145,34 @@ if __name__=="__main__":
 
     esempio_test    = v_test_unscaled[idx, :].to('cpu')
     esempio_test_pp = v_test[idx, :].to('cpu')
-    sol_test        = u_test_unscaled[idx]
+    sol_test        = u_test_unscaled[idx].to('cpu')
     x_test_unscaled = x_test_unscaled.to('cpu')
     
-    ## Third figure for approximation with DON of HH model
     with torch.no_grad():  # no grad for efficiency reasons
         out_test = model((esempio_test_pp, x_test))
         out_test = out_test.to('cpu')
 
-    # Create a single figure with a grid layout
-    fig, axs = plt.subplots(2, len(idx), figsize=(18, 8), gridspec_kw={'height_ratios': [2, 1]})
-    
-    # First row: Numerical approximation (V_m) and DON approximation (V_m)
+    results = []
     for i in range(len(idx)):
-        axs[0, i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
-        axs[0, i].plot(x_test_unscaled, out_test[i], 'r--', label=arc+' approximation')
-        axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=-5)
-        axs[0, i].set_xlabel('t')
-        axs[0, i].set_ylim([-100, 35])
-        axs[0, i].grid()
-        axs[0, i].legend()
-    
-    # Second row: Applied current (I_app)
-    for i in range(len(idx)):
-        axs[1, i].plot(x_test_unscaled, esempio_test[i])
-        axs[1, 0].set_ylabel('$I_{app}$(t)')
-        axs[1, i].set_xlabel('t')
-        axs[1, i].set_ylim([-0.2, 10])
-        axs[1, i].grid()
-    
-    # Adjust layout to prevent overlap
-    plt.tight_layout()
+        err = L2relLoss()(out_test[i].unsqueeze(0), sol_test[i].unsqueeze(0)).item()
+        results.append((i,err))
+        #print("Relative L2 for case "+str(i)+" = "+str(err))
+
+    # Sort the results based on the error values
+    results.sort(key=lambda x: x[1])
+
+    # Extract the errors
+    errors = [err for _, err in results]
+
+    # Create a histogram of the error values
+    plt.hist(errors, bins=20, edgecolor='black')
+    plt.xlabel('Relative L2 Error')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Relative L2 Errors for '+arc)
+
+    # Print sorted results
+    print("Sorted Results (index, error):")
+    for index, err in results:
+        print(f"Index: {index}, Error: {err}")
+
     plt.show()
