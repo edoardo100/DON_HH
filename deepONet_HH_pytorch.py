@@ -10,6 +10,7 @@ Learning Hodgkin-Huxley model with DeepONet
 from src.utility_dataset import *
 from src.architectures import get_optimizer, get_loss
 from src.don import DeepONet
+from src.fno_inv import AdFNO1d
 from src.wno import WNO1d
 from src.fno import FNO1d
 from src.training import Training
@@ -155,10 +156,14 @@ if __name__=="__main__":
         if full_v_data==False:
             raise ValueError("full_v_data must be true")
         model = FNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
+    elif arc=="AdFNO":
+        if full_v_data==False:
+            raise ValueError("full_v_data must be true")
+        model = AdFNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
-    print("Total DeepONet parameters: ", par_tot)
+    print("Total trainable parameters: ", par_tot)
     writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
     optimizer, schedulerName, scheduler = get_optimizer(model,lr,scheduler,epochs,u_train.shape[0],batch_size)

@@ -1,6 +1,6 @@
 #### EXAMPLE OF yml FILE FOR FOURIER NEURAL OPERATOR
 #### Dataset parameters
-arc: "FNO"
+arc: "AdFNO"
 dataset_train: "dataset/datasetHH_test2_train.mat" 
 dataset_test: "dataset/datasetHH_test2_test.mat"
 labels: False
