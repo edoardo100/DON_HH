@@ -16,6 +16,7 @@ from src.training import Training
 from src.architectures import L2relLoss
 # external modules
 import torch
+import statistics
 # for test launcher interface
 import os
 import yaml
@@ -163,16 +164,29 @@ if __name__=="__main__":
 
     # Extract the errors
     errors = [err for _, err in results]
-
+    median = statistics.median(errors)
+    print("Median of the data for " + arc + ": " + str(median))
+    # Change color of the bins depending on the architectures
+    color = 'skyblue'
+    if arc=='DON':
+        color = 'skyblue'
+    elif arc=='FNO':
+        color = 'orange'
+    elif arc=='WNO':
+        color = 'green'
     # Create a histogram of the error values
-    plt.hist(errors, bins=20, edgecolor='black')
-    plt.xlabel('Relative L2 Error')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of Relative L2 Errors for '+arc)
+    plt.figure(figsize=(9.5,6))
+    plt.hist(errors, bins=20, edgecolor='black', color=color)
+    plt.xlabel('Relative L2 Error', fontsize=18)
+    plt.ylabel('Frequency', fontsize=18)
+    plt.title('Relative L2 Test Errors for ' + arc + '\nMedian = {:.3f}'.format(median), fontsize=20)
+    plt.xticks(fontsize=14)  # Adjust fontsize for x ticks
+    plt.yticks(fontsize=14)  # Adjust fontsize for y ticks
 
     # Print sorted results
-    print("Sorted Results (index, error):")
+    #print("Sorted Results (index, error):")
+    listindex = [159, 69, 258, 309] # the same indexes shown in recover_model.py
     for index, err in results:
-        print(f"Index: {index}, Error: {err}")
-
+        if index in listindex:
+            print(f"Index: {index}, Error: {err}")
     plt.show()

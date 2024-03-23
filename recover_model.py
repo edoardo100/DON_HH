@@ -113,9 +113,10 @@ plotting   = config.get("plotting")
 #                 MAIN
 #########################################
 if __name__=="__main__":
-    # [159, 69, 258, 309]
+    # [159, 69, 134, 309]
     idx = torch.randint(low=0, high=400, size=(4,))
-    idx = torch.tensor([278, 69, 258, 309])
+    # 125
+    idx = torch.tensor([159, 69, 134, 309])
     print("indexes to print = "+str(idx))
     # Load dataset
     if "LR" in dataset_train:

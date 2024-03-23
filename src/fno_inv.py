@@ -1,10 +1,10 @@
 """
-fno.py
+fno_inv.py
 
-author: Massimiliano Ghiotto
-modified by: Edoardo Centofanti
+author: Edoardo Centofanti
+credits to : Yahya Saleh and Massimiliano Ghiotto
 
-classes relative to Fourier Neural Operator
+classes relative to adaptive-FNO
 """
 
 import torch
@@ -18,34 +18,45 @@ from .architectures import MLP, activation
 #########################################
 
 class LinearLayer(nn.Module):
-    def __init__(self, in_channels):
+    def __init__(self, shape):
         super().__init__()
-        self.in_channels = in_channels
-        self.weights = nn.init.zeros_(
-                    nn.Parameter(torch.empty(in_channels, dtype=torch.float)),
-                    )
-        self.bias = nn.init.zeros_(
-                    nn.Parameter(torch.empty(in_channels, dtype=torch.float)),
-                    )
+        self.shape = shape
+        
+        # more parameters: parameters for each one of the 32 vectors
+        #self.weights = nn.Parameter(torch.ones(shape[0], shape[1]),requires_grad=True)
+        #self.bias = nn.Parameter(torch.zeros(shape[0], shape[1]),requires_grad=True)
+        
+        # parameters shared between all the 32 vectors of size 510
+        self.weights = nn.Parameter(torch.zeros(shape[1], dtype=torch.float),requires_grad=True)
+        self.bias = nn.Parameter(torch.zeros(shape[1], dtype=torch.float),requires_grad=True)
+        
+        self.factor = 1e-2
     def forward(self, x, mode="direct"):
-        a = self.weights**2 + 1
+        a = self.weights**2+1
 
         if mode == "direct":
-            x = a * x + self.bias 
-
+            #x = a * x + self.bias 
+            #x = torch.einsum('jk,ijk->ijk',a,x)
+            x = torch.einsum('k,ijk->ijk',a,x)
+            x = x + self.bias
+            #print(x.shape)
+        elif mode == "inverse":
+            x = x - self.bias
+            #x = torch.einsum('ijk,jk->ijk',x,1./a)
+            x = torch.einsum('ijk,k->ijk',x,1./a)
+            #print(x.shape)  
         else:
-            x = (x-self.bias)/a 
-
+            ValueError('Invalid mode! It can be either direct or inverse')
         return x    
 
     def derivative(self, x):
-        return self.weights**2 + 1
+        return self.weights**2+1
     
 class AdFourierLayer(nn.Module):
-    def __init__(self, in_channels, out_channels, modes, weights_norm, scalar, act_fun):
+    def __init__(self, datasize, in_channels, out_channels, modes, weights_norm, scalar, act_fun):
         super().__init__()
         """
-        1D Fourier layer. We initialize the parameter for the Fourier layer  
+        1D Adaptive Fourier layer. We initialize the parameter for the Fourier layer  
         """
 
         self.in_channels = in_channels
@@ -54,13 +65,14 @@ class AdFourierLayer(nn.Module):
         self.weights_norm = weights_norm
         self.scalar = scalar
         self.activation = act_fun
+        self.g = LinearLayer((in_channels,datasize)) # shape (32,510)
         
         if scalar == "Complex":
             if weights_norm == 'Xavier':
                 # Xavier normalization
                 self.weights = nn.init.xavier_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, dtype=torch.cfloat)),
-                    gain = 1/(self.in_channels*self.out_channels))
+                gain = 1/(self.in_channels*self.out_channels))
                 
             elif weights_norm == 'Kaiming':
                 # Kaiming normalization
@@ -74,7 +86,7 @@ class AdFourierLayer(nn.Module):
                 self.weights = nn.init.xavier_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, 2, 
                         dtype = torch.float)),
-                    gain = 1/(self.in_channels*self.out_channels))
+                gain = 1/(self.in_channels*self.out_channels))
                 
             elif weights_norm == 'Kaiming':
                 # Kaiming normalization
@@ -114,11 +126,10 @@ class AdFourierLayer(nn.Module):
         """
         batchsize = x.shape[0]
         # perform adaptive strategy
-        g = LinearLayer(x.shape[2])
-        x = g(x) / g.derivative(x)
+        x = self.g(x,mode="inverse") / self.g.derivative(x)
         # Compute Fourier coefficients up to factor of e^(- something constant)
         x_ft = torch.fft.rfft(x)
-    
+
         # Multiply relevant Fourier modes
         if self.scalar == "Complex":
             out_ft = torch.zeros(batchsize, self.out_channels, x.size(-1)//2 + 1, 
@@ -144,7 +155,7 @@ class AdFNO1d(nn.Module):
     """ 
     Fourier Neural Operator for approximate the Hodgkin-Huxley model
     """
-    def __init__(self, d_a, d_v, d_u, L, modes, act_fun, 
+    def __init__(self, datasize, d_a, d_v, d_u, L, modes, act_fun, 
                  initialization, scalar, padding,
                  arc, x_padding, RNN):
         """ 
@@ -156,7 +167,7 @@ class AdFNO1d(nn.Module):
             hidden dimension        
             
         d_u : int
-            pari alla dimensione dello spazio in output 
+            equal to output shape dimension 
             
         L: int
            depth of FNO
@@ -190,12 +201,12 @@ class AdFNO1d(nn.Module):
         
         #### Fourier operator
         if self.RNN:
-            self.fouriers = AdFourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
+            self.fouriers = AdFourierLayer(datasize, d_v, d_v, modes, initialization, scalar, act_fun) 
             
             self.ws = nn.Linear(d_v, d_v)
         else:
             self.fouriers = nn.ModuleList([
-                AdFourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
+                AdFourierLayer(datasize, d_v, d_v, modes, initialization, scalar, act_fun) 
                 for _ in range(L) ])
             
             self.ws = nn.ModuleList([ nn.Linear(d_v, d_v) for _ in range(L) ])

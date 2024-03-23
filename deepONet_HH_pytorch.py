@@ -159,7 +159,8 @@ if __name__=="__main__":
     elif arc=="AdFNO":
         if full_v_data==False:
             raise ValueError("full_v_data must be true")
-        model = AdFNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
+        datasize = v_test.shape[1] + x_padding
+        model = AdFNO1d(datasize,d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
 
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
