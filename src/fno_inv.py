@@ -126,7 +126,7 @@ class AdFourierLayer(nn.Module):
         """
         batchsize = x.shape[0]
         # perform adaptive strategy
-        x = self.g(x,mode="inverse") / self.g.derivative(x)
+        x = self.g(x,mode="inverse") #/ self.g.derivative(x)
         # Compute Fourier coefficients up to factor of e^(- something constant)
         x_ft = torch.fft.rfft(x)
 

@@ -161,9 +161,14 @@ if __name__=="__main__":
 
     # Sort the results based on the error values
     results.sort(key=lambda x: x[1])
+    threshold = 0.1 # remove, but count data > 15%
 
     # Extract the errors
     errors = [err for _, err in results]
+    errors_thr = [i for i in errors if i < threshold]
+    not_included = len(errors) - len(errors_thr)
+    pcg_not_inc = not_included/len(errors)*100
+    formatted_pcg = "{:.1f}".format(pcg_not_inc)
     median = statistics.median(errors)
     print("Median of the data for " + arc + ": " + str(median))
     # Change color of the bins depending on the architectures
@@ -175,13 +180,14 @@ if __name__=="__main__":
     elif arc=='WNO':
         color = 'green'
     # Create a histogram of the error values
-    plt.figure(figsize=(9.5,6))
-    plt.hist(errors, bins=20, edgecolor='black', color=color)
-    plt.xlabel('Relative L2 Error', fontsize=18)
-    plt.ylabel('Frequency', fontsize=18)
-    plt.title('Relative L2 Test Errors for ' + arc + '\nMedian = {:.3f}'.format(median), fontsize=20)
-    plt.xticks(fontsize=14)  # Adjust fontsize for x ticks
-    plt.yticks(fontsize=14)  # Adjust fontsize for y ticks
+    plt.figure(figsize=(6,4.5))
+    label = formatted_pcg + "% test data have error > 10%"
+    plt.hist(errors_thr, bins=50, edgecolor='white', color=color,label=label)
+    plt.xlabel('Relative L2 Error', fontsize=14)
+    plt.ylabel('Frequency', fontsize=14)
+    plt.title('Relative L2 Test Errors for ' + arc + '\nMedian = {:.3f}'.format(median), fontsize=16)
+    plt.xticks(fontsize=12)  # Adjust fontsize for x ticks
+    plt.yticks(fontsize=12)  # Adjust fontsize for y ticks
 
     # Print sorted results
     #print("Sorted Results (index, error):")
@@ -189,4 +195,5 @@ if __name__=="__main__":
     for index, err in results:
         if index in listindex:
             print(f"Index: {index}, Error: {err}")
+    plt.legend(fontsize='large')
     plt.show()
