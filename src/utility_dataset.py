@@ -64,7 +64,8 @@ Load single train: when you have a single file
 """
 def load_single_train(dataname,scaling="None",labels=False,full_v_data=False):
     d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs']).float()
+    var_y     = [key for key in d.keys() if not key.startswith('__') and len(key)<3][0]
+    u_data    = torch.tensor(d[var_y]).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float()   # pulse times
     v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
@@ -197,7 +198,8 @@ have some information got from data that shouldn't know before the test phase.
 """
 def load_single_test(dataname,scale_fac=None,scaling=None,labels=False,full_v_data=False):
     d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs']).float()
+    var_y     = [key for key in d.keys() if not key.startswith('__') and len(key)<3][0]
+    u_data    = torch.tensor(d[var_y]).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[:,0:2]).float()   # pulse times
     v_data2   = (torch.tensor(d['iapps'])[:,[2]]).float()   # pulse intensities
@@ -273,7 +275,8 @@ Functions for LR dataset
 """
 def load_LR_train(dataname,full_v_data=False):
     d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs'][:1600,:]).float()
+    var_y     = [key for key in d.keys() if not key.startswith('__') and len(key)<3][0]
+    u_data    = torch.tensor(d[var_y][:1600,:]).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[:1600,[0]]).float()   # pulse intensities
     v_data2   = (torch.tensor(d['iapps'])[:1600,[1]]).float()   # potassium concentration
@@ -291,7 +294,8 @@ def load_LR_train(dataname,full_v_data=False):
 
 def load_LR_test(dataname,full_v_data=False):
     d         = sio.loadmat(dataname)
-    u_data    = torch.tensor(d['vs'][1600:,:]).float()
+    var_y     = [key for key in d.keys() if not key.startswith('__') and len(key)<3][0]
+    u_data    = torch.tensor(d[var_y][1600:,:]).float()
     x_data    = torch.tensor(d['tspan']).float()
     v_data1   = (torch.tensor(d['iapps'])[1600:,[0]]).float()   # pulse intensities
     v_data2   = (torch.tensor(d['iapps'])[1600:,[1]]).float()   # potassium concentration
