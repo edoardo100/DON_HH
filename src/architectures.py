@@ -171,7 +171,33 @@ class L2relLoss():
     
     def __call__(self, x, y):
         return self.rel(x, y)
+
+class L2relLossMultidim():
+    """
+    Relative L2 loss for multidimensional problems
+    """
+    def __init__(self):
+        self.name = "L2_rel_md"
+
+    def get_name(self):
+        return self.name
     
+    """
+    The idea is that the multidimensional dataset has shape d x N x J
+    in the HH case d is the number of functions (4: V,m,n and h), 
+    N is the number of solutions (1600 for train, 400 for test) and
+    J is the number of equispaced points (500)
+    """
+    def rel(self, x, y):
+        loss = 0
+        for i in range(x.shape[0]):
+            loss += L2relLoss(x[i],y[i])
+        loss /= x.shape[0] # we take the mean value
+        return loss
+
+    def __call__(self, x, y):
+        return self.rel(x,y)
+
 class MSE():
     def __init__(self):
         self.name = "mse"
@@ -225,6 +251,8 @@ class H1relLoss():
 def get_loss(Loss):
     if Loss == "L2":
         myloss = L2relLoss()
+    elif Loss == "L2md":
+        myloss = L2relLossMultidim()
     elif Loss == "mse":
         myloss = MSE()
     elif Loss == 'H1':
