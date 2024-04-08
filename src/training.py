@@ -86,14 +86,13 @@ class Training():
 
             t2 = default_timer()
             if ep % self.show_every == 0:
-                print('Epoch:', ep, 'Time:', t2-t1,
-                      'Train_loss_'+self.loss.get_name()+':', train_loss, 
-                      'Test_loss_l2:', test_l2,
-                      'Test_mse:', test_mse, 
-                      'Test_loss_h1:', test_h1
-                      )
+                print(f'Epoch:{ep}  Time:{t2 - t1:.{2}f}  '
+                      f'Train_loss_{self.loss.get_name()}:{train_loss:.{5}f}  '
+                      f'Test_loss_l2:{test_l2:.{5}f}  '
+                      f'Test_mse:{test_mse:.{5}f}  '
+                      f'Test_loss_h1:{test_h1:.{5}f}')
 
-                self.writer.add_scalars('DON_HH', {'Train_loss': train_loss,
+                self.writer.add_scalars('NO_HH', {'Train_loss': train_loss,
                                                         'Test_loss_l2': test_l2,
                                                         'Test_mse':    test_mse,
                                                         'Test_loss_h1': test_h1
@@ -130,7 +129,7 @@ class Training():
                 plt.show()
             self.writer.add_figure('Numerical approximation (V_m)', fig, 0)
 
-        #### approximate solution with DON of HH model
+        #### approximate solution with NO of HH model
         if ep % self.ep_step == 0:
             with torch.no_grad():  # no grad for effeciency reason
                 out_test = self.model((esempio_test_pp.to(self.device),self.x_test.to(self.device)))
@@ -142,7 +141,7 @@ class Training():
             elif self.scaling == "Mixed":
                 out_test = inverse_gaussian_scale(out_test.to(self.device),self.scale_fac[0],self.scale_fac[1])
             fig, ax = plt.subplots(1, len(idx), figsize = (18, 4))
-            fig.suptitle('DON approximation (V_m)')
+            fig.suptitle('NO approximation (V_m)')
             ax[0].set(ylabel = 'V_m (mV)')
             for i in range(len(idx)):
                 ax[i].plot(x_test_unscaled, out_test[i].to('cpu'))
@@ -150,8 +149,8 @@ class Training():
                 ax[i].grid()
             if self.plotting:
                 plt.show()
-            self.writer.add_figure('DON approximation (V_m)', fig, ep)
-            #### Module of the difference between classical and DON approximation
+            self.writer.add_figure('NO approximation (V_m)', fig, ep)
+            #### Module of the difference between classical and NO approximation
             diff = torch.abs(out_test.to('cpu') - sol_test.to('cpu'))
             fig, ax = plt.subplots(1, len(idx), figsize = (18, 4))
             fig.suptitle('Module of the difference')
