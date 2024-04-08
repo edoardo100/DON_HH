@@ -59,7 +59,7 @@ name_log_dir = 'exp_' + param_file_name
 name_model = 'model_' + param_file_name 
 
 #########################################
-# DeepONet's hyperparameter
+# Hyperparameter
 #########################################
 arc           = config.get("arc")
 dataset_train = config.get("dataset_train")
@@ -75,6 +75,7 @@ scheduler     = config.get("scheduler")
 Loss          = config.get("Loss")
 epochs        = config.get("epochs")
 lr            = config.get("lr")
+# DeepONet hyper-parameters
 u_dim         = config.get("u_dim")
 x_dim         = config.get("x_dim")
 G_dim         = config.get("G_dim")
@@ -86,23 +87,23 @@ arc_b         = config.get("arc_b")
 arc_t         = config.get("arc_t") 
 initial_b     = config.get("initial_b")
 initial_t     = config.get("initial_t")
-#### WNO parameters
+#### WNO hyper-parameters
 width = config.get("width")
 level = config.get("level")
-#### FNO parameters
-d_a = config.get("d_a")
-d_v = config.get("d_v")
-d_u = config.get("d_u")
-L = config.get("L")
-modes = config.get("modes")
-act_fun = config.get("act_fun")
+#### FNO hyper-parameters
+d_a            = config.get("d_a")
+d_v            = config.get("d_v")
+d_u            = config.get("d_u")
+L              = config.get("L")
+modes          = config.get("modes")
+act_fun        = config.get("act_fun")
 initialization = config.get("initialization")
-scalar = config.get("scalar")
-padding = config.get("padding")
-arc_fno = config.get("arc_fno")
-x_padding = config.get("x_padding")
-RNN = config.get("RNN")
-#### Plotting parameters
+scalar         = config.get("scalar")
+padding        = config.get("padding")
+arc_fno        = config.get("arc_fno")
+x_padding      = config.get("x_padding")
+RNN            = config.get("RNN")
+#### Plotting hyper-parameters
 show_every = config.get("show_every")
 ep_step    = config.get("ep_step")
 idx        = config.get("idx")
@@ -144,7 +145,7 @@ if __name__=="__main__":
     if arc=="DON":
         model = DeepONet(layers,activ,init,arc_b,arc_t,adapt_actfun)
     elif arc=="WNO":
-        if full_v_data==False:
+        if not full_v_data:
             raise ValueError("full_v_data must be true")
         if "LR" in dataset_train:
             dummy = torch.rand(1,3,x_train.size(0))
@@ -152,7 +153,7 @@ if __name__=="__main__":
             dummy = torch.rand(1,2,x_train.size(0))
         model = WNO1d(width,level,dummy)
     elif arc=="FNO":
-        if full_v_data==False:
+        if not full_v_data:
             raise ValueError("full_v_data must be true")
         model = FNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
 
