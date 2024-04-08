@@ -9,7 +9,7 @@ Learning Hodgkin-Huxley model with DeepONet
 # internal modules
 from src.utility_dataset import *
 from src.architectures import get_optimizer, get_loss
-from src.don import DeepONet
+from src.don import DeepONet, DeepONet_md
 from src.fno_inv import AdFNO1d
 from src.wno import WNO1d
 from src.fno import FNO1d
@@ -119,7 +119,7 @@ if __name__=="__main__":
     #### Network parameters
     layers, activ, init = None, None, None
 
-    if arc=="DON":
+    if arc=="DON" or "DON_md": # For DON or DON multidimensional
         layers = {"branch" : [u_dim] + inner_layer_b + [G_dim],
                   "trunk"  : [x_dim*(N_FourierF==0) + 2*N_FourierF] + inner_layer_t + [G_dim] }
         activ  = {"branch" : activation_b,
@@ -131,6 +131,31 @@ if __name__=="__main__":
     if "LR" in dataset_train:
         u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train,full_v_data)
         u_test, x_test, v_test, indices = load_LR_test(dataset_test,full_v_data)
+    elif arc=="DON_md": # for the moment we fix the dataset names because this feature is in beta version 
+        names_train = [
+            'dataset/datasetHH_test2_train.mat',
+            'dataset/datasetHH_test2_train_h.mat',
+            'dataset/datasetHH_test2_train_m.mat',
+            'dataset/datasetHH_test2_train_n.mat'
+        ]
+        names_test = [
+            'dataset/datasetHH_test2_test.mat',
+            'dataset/datasetHH_test2_test_h.mat',
+            'dataset/datasetHH_test2_test_m.mat',
+            'dataset/datasetHH_test2_test_n.mat'
+        ]
+        u_train_v, x_train, v_train, scale_fac, _ = load_train(names_train[0],scaling,labels,full_v_data,shuffle=True)
+        u_test_v, x_test, v_test, indices = load_test(names_test[0],scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_train_h, _, _, _, _ = load_train(names_train[1],scaling,labels,full_v_data,shuffle=True)
+        u_test_h, _, _, _ = load_test(names_test[1],scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_train_m, _, _, _, _ = load_train(names_train[2],scaling,labels,full_v_data,shuffle=True)
+        u_test_m, _, _, _ = load_test(names_test[2],scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_train_n, _, _, _, _ = load_train(names_train[3],scaling,labels,full_v_data,shuffle=True)
+        u_test_n, _, _, _ = load_test(names_test[3],scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_train = torch.stack((u_train_v,u_train_h,u_train_m,u_train_n),dim=0) # shape(4,1600,500)
+        u_test  = torch.stack((u_test_v,u_test_h,u_test_m,u_test_n),dim=0)
+        u_train = u_train.permute(1,2,0) # shape(1600,500,4). Necessary for DataLoader
+        u_test  = u_test.permute(1,2,0)
     else:
         u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
         u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
@@ -144,6 +169,9 @@ if __name__=="__main__":
     model = None
     if arc=="DON":
         model = DeepONet(layers,activ,init,arc_b,arc_t,adapt_actfun)
+    elif arc=="DON_md":
+       dim   = 4 # we have 4 equations
+       model = DeepONet_md(dim,layers,activ,init,arc_b,arc_t,adapt_actfun) 
     elif arc=="WNO":
         if full_v_data==False:
             raise ValueError("full_v_data must be true")
@@ -161,7 +189,8 @@ if __name__=="__main__":
             raise ValueError("full_v_data must be true")
         datasize = v_test.shape[1] + x_padding
         model = AdFNO1d(datasize,d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
-
+    else:
+        raise ValueError("This architecture has not been implemented.")
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
     print("Total trainable parameters: ", par_tot)

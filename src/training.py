@@ -52,6 +52,7 @@ class Training():
             train_loss = 0
             for v, u in self.train_loader:
                 v, u = v.to(self.device), u.to(self.device)
+                u    = u.permute(2,0,1) # e.g. back to (4,1600,500) for train
                 self.optimizer.zero_grad() # annealing the gradient
                 out = self.model.forward((v,self.x_train)) # compute the output
                 # compute the loss
@@ -71,10 +72,12 @@ class Training():
             with torch.no_grad():
                 for v, u in self.test_loader:
                     v, u = v.to(self.device), u.to(self.device)
+                    u    = u.permute(2,0,1)
                     out = self.model.forward((v,self.x_test))      
                     test_l2 += self.loss(out, u).item()
-                    test_mse += MSE()(out, u).item()
-                    test_h1 += H1relLoss()(out, u).item()
+                    #if len(out.size) == 2:
+                    #    test_mse += MSE()(out, u).item()
+                    #    test_h1 += H1relLoss()(out, u).item()
             
             train_loss/= self.ntrain
             test_l2/= self.ntest
@@ -166,8 +169,9 @@ class Training():
 
     def train(self):    
         t1 = default_timer()
-        u_test_unscaled, x_test_unscaled, v_test_unscaled = self.load_unscaled_data(self.dataset_test,self.indices)
+        # lines 171 and 176 deprecated since we have a new plotter
+        #u_test_unscaled, x_test_unscaled, v_test_unscaled = self.load_unscaled_data(self.dataset_test,self.indices)
         # Training process
         for ep in range(self.epochs+1):
             self.single_train_step(ep,t1)
-            self.plot_results(ep,u_test_unscaled,x_test_unscaled,v_test_unscaled)
+            #self.plot_results(ep,u_test_unscaled,x_test_unscaled,v_test_unscaled)

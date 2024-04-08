@@ -178,6 +178,7 @@ class L2relLossMultidim():
     """
     def __init__(self):
         self.name = "L2_rel_md"
+        self.loss = L2relLoss()
 
     def get_name(self):
         return self.name
@@ -191,7 +192,7 @@ class L2relLossMultidim():
     def rel(self, x, y):
         loss = 0
         for i in range(x.shape[0]):
-            loss += L2relLoss(x[i],y[i])
+            loss += self.loss(x[i],y[i])
         loss /= x.shape[0] # we take the mean value
         return loss
 
@@ -251,7 +252,7 @@ class H1relLoss():
 def get_loss(Loss):
     if Loss == "L2":
         myloss = L2relLoss()
-    elif Loss == "L2md":
+    elif Loss == "L2_md":
         myloss = L2relLossMultidim()
     elif Loss == "mse":
         myloss = MSE()
