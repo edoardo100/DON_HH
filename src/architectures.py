@@ -140,10 +140,14 @@ class AdaptiveLinear(nn.Linear):
 #########################################
 class MLP(nn.Module):
     """ shallow neural network """
-    def __init__(self, in_channels, out_channels, mid_channels, act_fun="ReLu"):
+    def __init__(self, in_channels, out_channels, mid_channels, act_fun="ReLu", arc=None):
         super(MLP, self).__init__()
-        self.mlp1 = nn.Linear(in_channels, mid_channels)
-        self.mlp2 = nn.Linear(mid_channels, out_channels)
+        if arc == "FNO":
+            self.mlp1 = nn.Conv1d(in_channels, mid_channels, 1)
+            self.mlp2 = nn.Conv1d(mid_channels, out_channels, 1)
+        else:
+            self.mlp1 = nn.Linear(in_channels, mid_channels)
+            self.mlp2 = nn.Linear(mid_channels, out_channels)
         self.activation = activation(act_fun)
 
     def forward(self, x):

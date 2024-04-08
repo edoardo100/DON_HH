@@ -110,7 +110,7 @@ class FourierLayer(nn.Module):
         return x
     
 #########################################
-# FNO for 1d model
+# FNO for 1D model
 #########################################
 class FNO1d(nn.Module):
     """ 
@@ -158,34 +158,34 @@ class FNO1d(nn.Module):
         self.RNN = RNN
         
         #### Lifting operator
-        self.p = nn.Linear(d_a, d_v) # input features is d_a = 2: (a(t), t)
+        self.p = nn.Conv1d(d_a, d_v, 1) # input features is d_a = 2: (a(t), t)
         
         #### Fourier operator
         if self.RNN:
             self.fouriers = FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
             
-            self.ws = nn.Linear(d_v, d_v)
+            self.ws = nn.Conv1d(d_v, d_v, 1)
         else:
             self.fouriers = nn.ModuleList([
                 FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
                 for _ in range(L) ])
             
-            self.ws = nn.ModuleList([ nn.Linear(d_v, d_v) for _ in range(L) ])
+            self.ws = nn.ModuleList([ nn.Conv1d(d_v, d_v, 1) for _ in range(L) ])
         
         # classic architecture
         if arc == "Classic":           
             #### Projection operator
-            self.q = nn.Linear(d_v, d_u) # output features is d_u: u(x,y)
+            self.q = nn.Conv1d(d_v, d_u, 1) # output features is d_u: u(x,y)
             
         elif arc == "Zongyi":
             #### Fourier operator
             if self.RNN:
-                self.mlps = MLP(d_v, d_v, d_v)
+                self.mlps = MLP(d_v, d_v, d_v, act_fun, "FNO")
             else:
-                self.mlps = nn.ModuleList([ MLP(d_v, d_v, d_v) for _ in range(L) ])
+                self.mlps = nn.ModuleList([ MLP(d_v, d_v, d_v, act_fun, "FNO") for _ in range(L) ])
             
             #### Projection operator
-            self.q = MLP(d_v, d_u, 4*d_u)
+            self.q = MLP(d_v, d_u, 4*d_u, act_fun, "FNO")
 
     def forward(self, x):
         # preprocessing
@@ -205,8 +205,8 @@ class FNO1d(nn.Module):
         # initially x.size() = (n_samples)*(n_t)*(d_a)
         
         #### Apply lifting operator P
-        x = self.p(x)          # x.size() = (n_samples)*(n_t)*(d_v)
-        x = x.permute(0, 2, 1) # x.size() = (n_samples)*(d_v)*(n_t)
+        x = x.permute(0, 2, 1) # x.size() = (n_samples)*(d_a)*(n_t)
+        x = self.p(x)          # x.size() = (n_samples)*(d_v)*(n_t)
         
         if self.padding:
             x = F.pad(x, [0, self.x_padding])
@@ -217,41 +217,33 @@ class FNO1d(nn.Module):
             for i in range(self.L):
                 if self.RNN:
                     x1 = self.fouriers(x)
-                    x2 = self.ws(x.permute(0, 2, 1))
-                    x = x1 + x2.permute(0, 2, 1)
-                    if i < self.L - 1:
-                        x = self.activation(x)
+                    x2 = self.ws(x)
                 else:
                     x1 = self.fouriers[i](x)
-                    x2 = self.ws[i](x.permute(0, 2, 1))
-                    x = x1 + x2.permute(0, 2, 1)
-                    if i < self.L - 1:
-                        x = self.activation(x)
+                    x2 = self.ws[i](x)
+                x = x1 + x2
+                if i < self.L - 1:
+                    x = self.activation(x)
         # Zongyi Li architecture
         elif self.arc == "Zongyi":
             for i in range(self.L):
                 if self.RNN:
                     x1 = self.fouriers(x)
-                    x1 = self.mlps(x1.permute(0, 2, 1))
-                    x2 = self.ws(x.permute(0, 2, 1))
-                    x = x1 + x2
-                    x = x.permute(0, 2, 1)
-                    if i < self.L - 1:
-                        x = self.activation(x)   
+                    x1 = self.mlps(x1)
+                    x2 = self.ws(x)
                 else:
                     x1 = self.fouriers[i](x)
-                    x1 = self.mlps[i](x1.permute(0, 2, 1))
-                    x2 = self.ws[i](x.permute(0, 2, 1))
-                    x = x1 + x2
-                    x = x.permute(0, 2, 1)
-                    if i < self.L - 1:
-                        x = self.activation(x)           
+                    x1 = self.mlps[i](x1)
+                    x2 = self.ws[i](x)
+                x = x1 + x2
+                if i < self.L - 1:
+                    x = self.activation(x)           
                     
         if self.padding:
             x = x[..., :-self.x_padding]
             
         #### apply projection operator Q
-        x = self.q(x.permute(0, 2, 1))
+        x = self.q(x)
         return x.squeeze()
     
 if __name__=="__main__":
