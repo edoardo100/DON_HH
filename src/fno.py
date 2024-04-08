@@ -31,31 +31,24 @@ class FourierLayer(nn.Module):
 
         if scalar == "Complex":
             if weights_norm == 'Xavier':
-                # Xavier normalization
                 self.weights = nn.init.xavier_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, dtype=torch.cfloat)),
                     gain = 1/(self.in_channels*self.out_channels))
-                
             elif weights_norm == 'Kaiming':
-                # Kaiming normalization
                 self.weights = torch.nn.init.kaiming_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, dtype=torch.cfloat)),
                     mode = 'fan_in', nonlinearity = act_fun.lower())
                
         elif scalar == "Real":
             if weights_norm == 'Xavier':
-                # Xavier normalization
                 self.weights = nn.init.xavier_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, 2, 
                         dtype = torch.float)),
                     gain = 1/(self.in_channels*self.out_channels))
-                
             elif weights_norm == 'Kaiming':
-                # Kaiming normalization
                 self.weights = torch.nn.init.kaiming_normal_(
                     nn.Parameter(torch.empty(in_channels, out_channels, self.modes, 2, 
                         dtype = torch.float)), mode = 'fan_in', nonlinearity = act_fun.lower())
-
     
     def mul_modes(self, modes, weights):
         """ Multiplication of the fourier modes """
@@ -78,12 +71,12 @@ class FourierLayer(nn.Module):
         Input
         ----------
         x : tensor
-            pytorch tensor of dimension (nbatch)*(d_v)*(n_t)
+            pytorch tensor of dimension (nbatch)*(in_channels)*(n_t)
 
         Returns
         -------
         x : tensor
-            output pytorch tensor of dimension (nbatch)*(d_v)*(n_t)
+            output pytorch tensor of dimension (nbatch)*(out_channels)*(n_t)
 
         """
         batchsize = x.shape[0]
@@ -95,7 +88,6 @@ class FourierLayer(nn.Module):
             out_ft = torch.zeros(batchsize, self.out_channels, x.size(-1)//2 + 1, 
                                  dtype=torch.cfloat)
             out_ft[:, :, :self.modes] = self.mul_modes(x_ft[:, :, :self.modes], self.weights)
-        
         elif self.scalar == "Real":
             x_ft = torch.stack([x_ft.real, x_ft.imag], dim = 3) # separate real from imag part
             
@@ -104,6 +96,7 @@ class FourierLayer(nn.Module):
             out_ft[:, :, :self.modes, :] = self.mul_modes(x_ft[:, :, :self.modes], self.weights)
             
             out_ft = torch.complex(out_ft[..., 0], out_ft[..., 1]) # return to complex values
+        
         # Return to physical space
         x = torch.fft.irfft(out_ft, n=x.size(-1))
         return x
@@ -178,25 +171,20 @@ class FNO1d(nn.Module):
         if self.RNN:
             self.fouriers = FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
             self.ws = nn.Conv1d(d_v, d_v, 1)
+            if arc == "Zongyi":
+                self.mlps = MLP(d_v, d_v, d_v, act_fun, "FNO")
         else:
             self.fouriers = nn.ModuleList([
                 FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
                 for _ in range(L) ])
             self.ws = nn.ModuleList([ nn.Conv1d(d_v, d_v, 1) for _ in range(L) ])
-        
-        # classic architecture
-        if arc == "Classic":           
-            #### Projection operator
-            self.q = nn.Conv1d(d_v, d_u, 1) # output features is d_u: u(x,y)
-            
-        elif arc == "Zongyi":
-            #### Fourier operator
-            if self.RNN:
-                self.mlps = MLP(d_v, d_v, d_v, act_fun, "FNO")
-            else:
+            if arc == "Zongyi":
                 self.mlps = nn.ModuleList([ MLP(d_v, d_v, d_v, act_fun, "FNO") for _ in range(L) ])
-            
-            #### Projection operator
+        
+        #### Projection operator 
+        if arc == "Classic":           
+            self.q = nn.Conv1d(d_v, d_u, 1) # output features is d_u: u(x,y)
+        elif arc == "Zongyi":
             self.q = MLP(d_v, d_u, 4*d_u, act_fun, "FNO")
 
     def forward(self, x):
