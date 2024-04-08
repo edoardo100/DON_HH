@@ -56,13 +56,15 @@ class Training():
                 out = self.model.forward((v,self.x_train)) # compute the output
                 # compute the loss
                 loss = self.loss(out, u)
+                train_loss += loss.item() # update the loss function
                 loss.backward() # automatic back propagation
                 self.optimizer.step()
                 if self.schedulerName.lower() == "cosineannealinglr":
                     self.scheduler.step()
-                train_loss += loss.item() # update the loss function
             if self.schedulerName.lower() == "steplr":
                 self.scheduler.step()
+            elif self.schedulerName.lower() == "reduceonplateau":
+                self.scheduler.step(test_l2)
             #### Evaluate the model on the test set
             self.model.eval()
             test_l2  = 0.0
@@ -71,18 +73,26 @@ class Training():
             with torch.no_grad():
                 for v, u in self.test_loader:
                     v, u = v.to(self.device), u.to(self.device)
-                    out = self.model.forward((v,self.x_test))      
-                    test_l2 += self.loss(out, u).item()
-                    test_mse += MSE()(out, u).item()
-                    test_h1 += H1relLoss()(out, u).item()
-            
+                    out = self.model.forward((v,self.x_test))
+                    if self.loss.get_name() == "L2_rel":
+                        test_l2 += self.loss(out, u).item()
+                        test_mse += MSE()(out, u).item()
+                        test_h1 += H1relLoss()(out, u).item()
+                    elif self.loss.get_name() == "mse":
+                        test_l2 += L2relLoss()(out, u).item()
+                        test_mse += self.loss(out, u).item()   
+                        test_h1 += H1relLoss()(out, u).item()
+                    elif self.loss.get_name() == "H1_rel":
+                        test_l2 += L2relLoss()(out, u).item()
+                        test_mse += MSE()(out, u).item()
+                        test_h1 += self.loss(out, u).item()
+                         
             train_loss/= self.ntrain
             test_l2/= self.ntest
             test_mse/= self.ntest
             test_h1/= self.ntest
 
-            if self.schedulerName.lower() == "reduceonplateau":
-                self.scheduler.step(test_l2)
+            print(self.loss.get_name())
 
             t2 = default_timer()
             if ep % self.show_every == 0:
