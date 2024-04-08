@@ -63,8 +63,6 @@ class Training():
                     self.scheduler.step()
             if self.schedulerName.lower() == "steplr":
                 self.scheduler.step()
-            elif self.schedulerName.lower() == "reduceonplateau":
-                self.scheduler.step(test_l2)
             #### Evaluate the model on the test set
             self.model.eval()
             test_l2  = 0.0
@@ -86,7 +84,10 @@ class Training():
                         test_l2 += L2relLoss()(out, u).item()
                         test_mse += MSE()(out, u).item()
                         test_h1 += self.loss(out, u).item()
-                         
+
+            if self.schedulerName.lower() == "reduceonplateau":
+                self.scheduler.step(test_l2)
+
             train_loss/= self.ntrain
             test_l2/= self.ntest
             test_mse/= self.ntest
