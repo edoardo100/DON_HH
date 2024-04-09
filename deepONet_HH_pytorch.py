@@ -137,7 +137,7 @@ if __name__=="__main__":
         
     # batch loader
     train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
-                                                batch_size = batch_size, shuffle=True, generator = torch.Generator(device='cuda'))
+                                                batch_size = batch_size, shuffle=True, generator = torch.Generator(device=mydevice))
     test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
                                               batch_size = batch_size) 
     
