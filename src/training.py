@@ -1,7 +1,7 @@
 from timeit import default_timer
 import torch
 from .utility_dataset import *
-from .architectures import MSE, H1relLoss
+from .architectures import L2relLoss, L2relLossMultidim, MSE, H1relLoss
 
 class Training():
     def __init__(self, model, epochs, optimizer, schedulerName, scheduler, loss, 
@@ -36,11 +36,11 @@ class Training():
                 out = self.model.forward((v,self.x_train)) # compute the output
                 # compute the loss
                 loss = self.loss(out, u)
+                train_loss += loss.item() # update the loss function
                 loss.backward() # automatic back propagation
                 self.optimizer.step()
                 if self.schedulerName.lower() == "cosineannealinglr":
                     self.scheduler.step()
-                train_loss += loss.item() # update the loss function
             if self.schedulerName.lower() == "steplr":
                 self.scheduler.step()
             #### Evaluate the model on the test set
@@ -53,9 +53,11 @@ class Training():
                     v, u = v.to(self.device), u.to(self.device)
                     if len(u.shape) > 2:
                         u = u.permute(2,0,1)
-                    out = self.model.forward((v,self.x_test))      
-                    test_l2 += self.loss(out, u).item()
+                        out = self.model.forward((v,self.x_test))      
+                        test_l2 += L2relLossMultidim()(out, u).item()
                     if len(out.shape) == 2:
+                        out = self.model.forward((v,self.x_test))  
+                        test_l2 += L2relLoss()(out, u).item()
                         test_mse += MSE()(out, u).item()
                         test_h1 += H1relLoss()(out, u).item()
             
@@ -64,22 +66,19 @@ class Training():
             test_mse/= self.ntest
             test_h1/= self.ntest
 
-            if self.schedulerName.lower() == "reduceonplateau":
-                self.scheduler.step(test_l2)
-
             t2 = default_timer()
             if ep % self.show_every == 0:
                 if self.loss.get_name() == "L2_rel_md":
-                    print('Epoch:', ep, 'Time:', t2-t1,
-                      'Train_loss_'+self.loss.get_name()+':', train_loss, 
-                      'Test_loss_'+self.loss.get_name()+':', test_l2,
+                    print(f'Epoch:{ep}  Time:{t2 - t1:.{2}f}  '
+                      f'Train_loss_{self.loss.get_name()}:{train_loss:.{5}f}  '
+                      f'Test_loss_{self.loss.get_name()}:{test_l2:.{5}f}  '
                       )
                 else:
-                    print('Epoch:', ep, 'Time:', t2-t1,
-                      'Train_loss_'+self.loss.get_name()+':', train_loss, 
-                      'Test_loss_l2:', test_l2,
-                      'Test_mse:', test_mse, 
-                      'Test_loss_h1:', test_h1
+                    print(f'Epoch:{ep}  Time:{t2 - t1:.{2}f}  '
+                      f'Train_loss_{self.loss.get_name()}:{train_loss:.{5}f}  '
+                      f'Test_loss_l2:{test_l2:.{5}f}  '
+                      f'Test_mse:{test_mse:.{5}f}  '
+                      f'Test_loss_h1:{test_h1:.{5}f}'
                       )
 
     def train(self):    
