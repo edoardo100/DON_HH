@@ -49,9 +49,9 @@ def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size):
             iterations = epochs*(ntrain//batch_size)
             scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max = iterations)
         elif schedulerName.lower() == "reduceonplateau":
-            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.9,
+            scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.95,
                                         patience=10, threshold=0.001, threshold_mode='rel', cooldown=0, 
-                                        min_lr=0, eps=1e-08, verbose=True) 
+                                        min_lr=1e-4, eps=1e-08, verbose=True) 
         else:
             raise ValueError("This scheduler has not been implemented yet.")
     else:
@@ -140,10 +140,14 @@ class AdaptiveLinear(nn.Linear):
 #########################################
 class MLP(nn.Module):
     """ shallow neural network """
-    def __init__(self, in_channels, out_channels, mid_channels, act_fun="ReLu"):
+    def __init__(self, in_channels, out_channels, mid_channels, act_fun="ReLu", arc=None):
         super(MLP, self).__init__()
-        self.mlp1 = nn.Linear(in_channels, mid_channels)
-        self.mlp2 = nn.Linear(mid_channels, out_channels)
+        if arc == "FNO":
+            self.mlp1 = nn.Conv1d(in_channels, mid_channels, 1)
+            self.mlp2 = nn.Conv1d(mid_channels, out_channels, 1)
+        else:
+            self.mlp1 = nn.Linear(in_channels, mid_channels)
+            self.mlp2 = nn.Linear(mid_channels, out_channels)
         self.activation = activation(act_fun)
 
     def forward(self, x):
@@ -171,7 +175,29 @@ class L2relLoss():
     
     def __call__(self, x, y):
         return self.rel(x, y)
+
+class L2relLossMultidim():
+    """
+    Relative L2 loss for multidimensional problems
+    """
+    def __init__(self):
+        self.name = "L2_rel_md"
+        self.loss = L2relLoss()
+
+    def get_name(self):
+        return self.name
     
+    """
+    The idea is that the multidimensional dataset has shape d x N x J
+    in the HH case d is the number of functions (4: V,m,n and h), 
+    N is the number of solutions (1600 for train, 400 for test) and
+    J is the number of equispaced points (500)
+    """
+    
+    def __call__(self, x, y):
+        rel = torch.vmap(self.loss)
+        return torch.mean(rel(x,y))
+
 class MSE():
     def __init__(self):
         self.name = "mse"
@@ -225,6 +251,8 @@ class H1relLoss():
 def get_loss(Loss):
     if Loss == "L2":
         myloss = L2relLoss()
+    elif Loss == "L2_md":
+        myloss = L2relLossMultidim()
     elif Loss == "mse":
         myloss = MSE()
     elif Loss == 'H1':
