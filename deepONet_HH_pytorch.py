@@ -20,8 +20,6 @@ import torch
 import os
 import yaml
 import argparse
-# tensorboard and plotting
-from tensorboardX import SummaryWriter
 
 #########################################
 # default value
@@ -113,8 +111,6 @@ plotting   = config.get("plotting")
 #                 MAIN
 #########################################
 if __name__=="__main__":
-
-    writer = SummaryWriter(log_dir = name_log_dir )
     
     #### Network parameters
     layers, activ, init = None, None, None
@@ -194,7 +190,6 @@ if __name__=="__main__":
     # Count the parameters
     par_tot = sum(p.numel() for p in model.parameters())
     print("Total trainable parameters: ", par_tot)
-    writer.add_text("Parameters", 'Total parameters number: ' + str(par_tot), 0)
 
     optimizer, schedulerName, scheduler = get_optimizer(model,lr,scheduler,epochs,u_train.shape[0],batch_size)
 
@@ -215,19 +210,11 @@ if __name__=="__main__":
         train_loader=train_loader,
         test_loader=test_loader,
         x_train=x_train,
-        v_test=v_test,
         x_test=x_test,
-        scale_fac=scale_fac,
-        scaling=scaling,
-        idx=idx,
-        writer=writer,
-        ep_step=ep_step,
-	device=mydevice,
+	    device=mydevice,
         show_every=show_every
     )
 
     trainer.train()
 
-    writer.flush() # to save final data
-    writer.close() # close tensorboard writer
     torch.save(model, name_model)
