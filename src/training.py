@@ -52,7 +52,8 @@ class Training():
             train_loss = 0
             for v, u in self.train_loader:
                 v, u = v.to(self.device), u.to(self.device)
-                u    = u.permute(2,0,1) # e.g. back to (4,1600,500) for train
+                if len(u.shape) > 2:
+                    u    = u.permute(2,0,1) # e.g. back to (4,1600,500) for train
                 self.optimizer.zero_grad() # annealing the gradient
                 out = self.model.forward((v,self.x_train)) # compute the output
                 # compute the loss
@@ -72,12 +73,13 @@ class Training():
             with torch.no_grad():
                 for v, u in self.test_loader:
                     v, u = v.to(self.device), u.to(self.device)
-                    u    = u.permute(2,0,1)
+                    if len(u.shape) > 2:
+                        u = u.permute(2,0,1)
                     out = self.model.forward((v,self.x_test))      
                     test_l2 += self.loss(out, u).item()
-                    #if len(out.size) == 2:
-                    #    test_mse += MSE()(out, u).item()
-                    #    test_h1 += H1relLoss()(out, u).item()
+                    if len(out.shape) == 2:
+                        test_mse += MSE()(out, u).item()
+                        test_h1 += H1relLoss()(out, u).item()
             
             train_loss/= self.ntrain
             test_l2/= self.ntest
@@ -89,7 +91,13 @@ class Training():
 
             t2 = default_timer()
             if ep % self.show_every == 0:
-                print('Epoch:', ep, 'Time:', t2-t1,
+                if self.loss.get_name() == "L2_rel_md":
+                    print('Epoch:', ep, 'Time:', t2-t1,
+                      'Train_loss_'+self.loss.get_name()+':', train_loss, 
+                      'Test_loss_'+self.loss.get_name()+':', test_l2,
+                      )
+                else:
+                    print('Epoch:', ep, 'Time:', t2-t1,
                       'Train_loss_'+self.loss.get_name()+':', train_loss, 
                       'Test_loss_l2:', test_l2,
                       'Test_mse:', test_mse, 
