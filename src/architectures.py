@@ -51,7 +51,7 @@ def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size):
         elif schedulerName.lower() == "reduceonplateau":
             scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.95,
                                         patience=10, threshold=0.001, threshold_mode='rel', cooldown=0, 
-                                        min_lr=2e-4, eps=1e-08, verbose=True) 
+                                        min_lr=1e-4, eps=1e-08, verbose=True) 
         else:
             raise ValueError("This scheduler has not been implemented yet.")
     else:
@@ -193,15 +193,10 @@ class L2relLossMultidim():
     N is the number of solutions (1600 for train, 400 for test) and
     J is the number of equispaced points (500)
     """
-    def rel(self, x, y):
-        loss = 0
-        for i in range(x.shape[0]):
-            loss += self.loss(x[i],y[i])
-        loss /= x.shape[0] # we take the mean value
-        return loss
-
+    
     def __call__(self, x, y):
-        return self.rel(x,y)
+        rel = torch.vmap(self.loss)
+        return torch.mean(rel(x,y))
 
 class MSE():
     def __init__(self):

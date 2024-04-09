@@ -240,7 +240,10 @@ class FNO1d(nn.Module):
             
         #### apply projection operator Q
         x = self.q(x)
-        return x.squeeze(1)
+        if self.d_u == 1:
+            return x.squeeze(1)
+        else:
+            return x.permute(1,0,2)
     
 if __name__=="__main__":
     ax    = torch.rand(200,500)

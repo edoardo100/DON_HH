@@ -128,7 +128,7 @@ if __name__=="__main__":
     if "LR" in dataset_train:
         u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train,full_v_data)
         u_test, x_test, v_test, indices = load_LR_test(dataset_test,full_v_data)
-    elif arc=="DON_md": # for the moment we fix the dataset names because this feature is in beta version 
+    elif arc=="DON_md" or arc=="FNO_md": # for the moment we fix the dataset names because this feature is in beta version 
         names_train = [
             'dataset/datasetHH_test2_train.mat',
             'dataset/datasetHH_test2_train_h.mat',
@@ -177,11 +177,11 @@ if __name__=="__main__":
         else:
             dummy = torch.rand(1,2,x_train.size(0))
         model = WNO1d(width,level,dummy)
-    elif arc=="FNO":
+    elif arc=="FNO" or arc=="FNO_md":
         if not full_v_data:
             raise ValueError("full_v_data must be true")
         model = FNO1d(d_a,d_v,d_u,L,modes,act_fun,initialization,scalar,padding,arc_fno,x_padding,RNN)
-    elif arc=="AdFNO":
+    elif arc=="AdFNO" or arc=="AdFNO_md":
         if full_v_data==False:
             raise ValueError("full_v_data must be true")
         datasize = v_test.shape[1] + x_padding
