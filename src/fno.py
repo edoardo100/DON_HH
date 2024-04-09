@@ -100,58 +100,43 @@ class FourierLayer(nn.Module):
         # Return to physical space
         x = torch.fft.irfft(out_ft, n=x.size(-1))
         return x
-    
+
 #########################################
-# FNO for 1D model
+# FNO for 1d model
 #########################################
 class FNO1d(nn.Module):
-    """ 
+    """
     Fourier Neural Operator for approximate the Hodgkin-Huxley model
     """
-    def __init__(self, d_a, d_v, d_u, L, modes, act_fun, 
+    def __init__(self, d_a, d_v, d_u, L, modes, act_fun,
                  initialization, scalar, padding,
                  arc, x_padding, RNN):
-        """ 
-        Parameters
-        ----------
+        """
+
         d_a : int
             input dimension
-            
+
         d_v : int
-            hidden dimension        
-            
+            hidden dimension
+
         d_u : int
-            pari alla dimensione dello spazio in output 
-            
+            pari alla dimensione dello spazio in output
+
         L: int
            depth of FNO
-          
+
         modes : int
             equal to k_{max, 1}
-        
+
         act_fun: string
             act_fun function
 
-        initialization: string
-            initialization function for fourier layer
-
-        scalar: string
-            scalar type for fourier layer
-        
         padding: bool
-            True if you want padding, False otherwise  
+            True if you want padding, False otherwise
 
-        arc: string
-            architecture of the model
-
-        x_padding: int
-            padding size
-
-        RNN: bool
-            True if you want to use RNN-type architecture, False otherwise
         """
-        super().__init__()      
-        
+        super().__init__()
+
         self.d_a = d_a
         self.d_v = d_v
         self.d_u = d_u
@@ -163,61 +148,63 @@ class FNO1d(nn.Module):
         if self.padding:
             self.x_padding = x_padding
         self.RNN = RNN
-        
+
         #### Lifting operator
-        self.p = nn.Conv1d(d_a, d_v, 1) # input features is d_a = 2: (a(t), t)
-        
+        self.p = nn.Linear(d_a, d_v) # input features is d_a = 2: (a(t), t)
+
         #### Fourier operator
         if self.RNN:
-            self.fouriers = FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
-            self.ws = nn.Conv1d(d_v, d_v, 1)
+            self.fouriers = FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun)
+            self.ws = nn.Linear(d_v, d_v)
             if arc == "Zongyi":
-                self.mlps = MLP(d_v, d_v, d_v, act_fun, "FNO")
+                self.mlps = MLP(d_v, d_v, d_v, act_fun)
         else:
             self.fouriers = nn.ModuleList([
-                FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun) 
+                FourierLayer(d_v, d_v, modes, initialization, scalar, act_fun)
                 for _ in range(L) ])
-            self.ws = nn.ModuleList([ nn.Conv1d(d_v, d_v, 1) for _ in range(L) ])
+            self.ws = nn.ModuleList([ nn.Linear(d_v, d_v) for _ in range(L) ])
             if arc == "Zongyi":
-                self.mlps = nn.ModuleList([ MLP(d_v, d_v, d_v, act_fun, "FNO") for _ in range(L) ])
+                self.mlps = nn.ModuleList([ MLP(d_v, d_v, d_v, act_fun) for _ in range(L) ])
         
-        #### Projection operator 
-        if arc == "Classic":           
-            self.q = nn.Conv1d(d_v, d_u, 1) # output features is d_u: u(x,y)
+        #### Projection operator
+        if arc == "Classic":    
+            self.q = nn.Linear(d_v, d_u) # output features is d_u: u(x,y)
         elif arc == "Zongyi":
-            self.q = MLP(d_v, d_u, 4*d_u, act_fun, "FNO")
+            self.q = MLP(d_v, d_u, 4*d_u)
 
     def forward(self, x):
-        #### preprocessing
-        if self.d_a==2: 
+        # preprocessing
+        if self.d_a==2:
             v, x = x[0], x[1]
             v = v.unsqueeze(-1)
         elif self.d_a==3:
             v, x = x[0], x[1]
             v = v.permute(0, 2, 1)
         else:
-            raise ValueError("d_a dimension invalid.") 
+            raise ValueError("d_a dimension invalid.")
         x = x.reshape(1,x.size(0),1).repeat([v.size(0), 1, 1])
-        x = torch.cat((v,x),dim=-1) # initially x.size() = (n_samples)*(n_t)*(d_a)
-        
+        x = torch.cat((v,x),dim=-1)
+        # initially x.size() = (n_samples)*(n_t)*(d_a)
+
         #### Apply lifting operator P
-        x = x.permute(0, 2, 1) # x.size() = (n_samples)*(d_a)*(n_t)
-        x = self.p(x)          # x.size() = (n_samples)*(d_v)*(n_t)
-        
+        x = self.p(x)          # x.size() = (n_samples)*(n_t)*(d_v)
+        x = x.permute(0, 2, 1) # x.size() = (n_samples)*(d_v)*(n_t)
+
         if self.padding:
             x = F.pad(x, [0, self.x_padding])
-        
+
         #### Fourier Layers
         # classic architecture
         if self.arc == "Classic":
             for i in range(self.L):
                 if self.RNN:
                     x1 = self.fouriers(x)
-                    x2 = self.ws(x)
+                    x2 = self.ws(x.permute(0, 2, 1))    
                 else:
                     x1 = self.fouriers[i](x)
-                    x2 = self.ws[i](x)
-                x = x1 + x2
+                    x2 = self.ws[i](x.permute(0, 2, 1))
+                
+                x = x1 + x2.permute(0, 2, 1)
                 if i < self.L - 1:
                     x = self.activation(x)
         # Zongyi Li architecture
@@ -225,25 +212,27 @@ class FNO1d(nn.Module):
             for i in range(self.L):
                 if self.RNN:
                     x1 = self.fouriers(x)
-                    x1 = self.mlps(x1)
-                    x2 = self.ws(x)
+                    x1 = self.mlps(x1.permute(0, 2, 1))
+                    x2 = self.ws(x.permute(0, 2, 1))
                 else:
                     x1 = self.fouriers[i](x)
-                    x1 = self.mlps[i](x1)
-                    x2 = self.ws[i](x)
+                    x1 = self.mlps[i](x1.permute(0, 2, 1))
+                    x2 = self.ws[i](x.permute(0, 2, 1))
+                
                 x = x1 + x2
+                x = x.permute(0, 2, 1)
                 if i < self.L - 1:
-                    x = self.activation(x)           
-                    
+                    x = self.activation(x)
+
         if self.padding:
             x = x[..., :-self.x_padding]
-            
+
         #### apply projection operator Q
-        x = self.q(x)
+        x = self.q(x.permute(0, 2, 1))
         if self.d_u == 1:
-            return x.squeeze(1)
+            return x.squeeze(-1)
         else:
-            return x.permute(1,0,2)
+            return x.permute(2,0,1)
     
 if __name__=="__main__":
     ax    = torch.rand(200,500)
