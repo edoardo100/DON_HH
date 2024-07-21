@@ -9,11 +9,7 @@ Learning Hodgkin-Huxley model with DeepONet
 # internal modules
 from src.utility_dataset import *
 from src.architectures import get_optimizer, get_loss
-from src.don import DeepONet
-from src.wno import WNO1d
-from src.fno import FNO1d
-from src.training import Training
-from src.architectures import L2relLoss
+from src.architectures import L2relLoss, L2relLossMultidim
 # external modules
 import torch
 import statistics
@@ -118,19 +114,11 @@ if __name__=="__main__":
     # [159, 69, 258, 309]
     idx = torch.tensor([i for i in range(400)])
     # Load dataset
-    if "LR" in dataset_train:
-        u_train, x_train, v_train, scale_fac = load_LR_train(dataset_train,full_v_data)
-        u_test, x_test, v_test, indices = load_LR_test(dataset_test,full_v_data)
-    else:
-        u_train, x_train, v_train, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
-        u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
+    # if "LR" in dataset_train:
+    #     u_test, x_test, v_test, indices = load_LR_test(dataset_test,full_v_data)
+    # else:
+    #     u_test, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
         
-    # batch loader
-    train_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_train, u_train),
-                                                batch_size = batch_size)
-    test_loader = torch.utils.data.DataLoader(torch.utils.data.TensorDataset(v_test, u_test),
-                                              batch_size = batch_size) 
-    
     # Loss function
     myloss = get_loss(Loss)
 
@@ -138,16 +126,37 @@ if __name__=="__main__":
 
     model = torch.load(modelname, map_location=torch.device('cpu'))
 
-    #### initial value of v
-    u_test_unscaled, x_test_unscaled, v_test_unscaled = load_test(dataset_test,full_v_data=True)
+    #### import dataset
+    if arc=="DON_md" or arc=="FNO_md": # for the moment we fix the dataset names because this feature is in beta version 
+        names_train = [
+            'dataset/datasetHH_test2_train.mat',
+            'dataset/datasetHH_test2_train_h.mat',
+            'dataset/datasetHH_test2_train_m.mat',
+            'dataset/datasetHH_test2_train_n.mat'
+        ]
+        names_test = [
+            'dataset/datasetHH_test2_test.mat',
+            'dataset/datasetHH_test2_test_h.mat',
+            'dataset/datasetHH_test2_test_m.mat',
+            'dataset/datasetHH_test2_test_n.mat'
+        ]
+        _, _, _, scale_fac, _ = load_train(names_test[0],scaling,labels,full_v_data,shuffle=True)
+        _, x_test, v_test, indices = load_test(names_test[0],scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_test_v, _, _ = load_test(names_test[0],full_v_data=True)
+        u_test_h, _, _ = load_test(names_test[1],full_v_data=True)
+        u_test_m, _, _ = load_test(names_test[2],full_v_data=True)
+        u_test_n, _, _ = load_test(names_test[3],full_v_data=True)
+        u_test_unscaled  = torch.stack((u_test_v,u_test_h,u_test_m,u_test_n),dim=0) # shape(4,1600,500)
+        u_test_unscaled  = u_test_unscaled[:,indices,:]
+        sol_test         = u_test_unscaled[:,idx,:].to('cpu')
+    else:
+        _, _, _, scale_fac, _ = load_train(dataset_train,scaling,labels,full_v_data,shuffle=True)
+        _, x_test, v_test, indices = load_test(dataset_test,scale_fac,scaling,labels,full_v_data,shuffle=True)
+        u_test_unscaled, _, _ = load_test(dataset_test,full_v_data=True)
+        u_test_unscaled       = u_test_unscaled[indices]
+        sol_test              = u_test_unscaled[idx].to('cpu')
     # Same order of scaled data
-    u_test_unscaled = u_test_unscaled[indices]
-    v_test_unscaled = v_test_unscaled[indices]
-
-    esempio_test    = v_test_unscaled[idx, :].to('cpu')
     esempio_test_pp = v_test[idx, :].to('cpu')
-    sol_test        = u_test_unscaled[idx].to('cpu')
-    x_test_unscaled = x_test_unscaled.to('cpu')
     
     with torch.no_grad():  # no grad for efficiency reasons
         out_test = model((esempio_test_pp, x_test))
@@ -155,7 +164,10 @@ if __name__=="__main__":
 
     results = []
     for i in range(len(idx)):
-        err = L2relLoss()(out_test[i].unsqueeze(0), sol_test[i].unsqueeze(0)).item()
+        if "_md" in arc:
+            err = L2relLossMultidim()(out_test[:,i,:].unsqueeze(1),sol_test[:,i,:].unsqueeze(1)).item()
+        else:
+            err = L2relLoss()(out_test[i].unsqueeze(0), sol_test[i].unsqueeze(0)).item()
         results.append((i,err))
         #print("Relative L2 for case "+str(i)+" = "+str(err))
 

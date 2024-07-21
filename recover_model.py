@@ -9,10 +9,6 @@ Learning Hodgkin-Huxley model with DeepONet
 # internal modules
 from src.utility_dataset import *
 from src.architectures import get_optimizer, get_loss
-from src.don import DeepONet
-from src.wno import WNO1d
-from src.fno import FNO1d
-from src.training import Training
 # external modules
 import torch
 # for test launcher interface
@@ -154,20 +150,35 @@ if __name__=="__main__":
     with torch.no_grad():  # no grad for efficiency reasons
         out_test = model((esempio_test_pp, x_test))
         out_test = out_test.to('cpu')
-
+    
+    params = {'legend.fontsize': 12,
+              'axes.labelsize': 20,
+              'axes.titlesize': 20,
+              'xtick.labelsize': 15,
+              'ytick.labelsize': 15}
+    plt.rcParams.update(params)
     # Create a single figure with a grid layout
-    fig, axs = plt.subplots(2, len(idx), figsize=(18, 8), gridspec_kw={'height_ratios': [2, 1]})
+    fig, axs = plt.subplots(2, len(idx), figsize=(16, 8), gridspec_kw={'height_ratios': [2, 1]})
     
     # First row: Numerical approximation (V_m) and DON approximation (V_m)
+    #for i in range(len(idx)):
+    #    axs[0, i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
+    #    axs[0, i].plot(x_test_unscaled, out_test[i], 'r--', label=arc+' approximation')
+    #    axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=-5)
+    #    axs[0, i].set_xlabel('t')
+    #    axs[0, i].set_ylim([-100, 50])
+    #    axs[0, i].grid()
+    #    axs[0, i].legend(loc='upper left')
+
+    # OR First row: Error between Numerical approximation (V_m) and DON approximation (V_m)
     for i in range(len(idx)):
-        axs[0, i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
-        axs[0, i].plot(x_test_unscaled, out_test[i], 'r--', label=arc+' approximation')
-        axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=-5)
+        axs[0, i].semilogy(x_test_unscaled, torch.abs(sol_test[i]-out_test[i]).to('cpu'), label='$|u_{NN}-u_{num}|$')
+        axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=5)
         axs[0, i].set_xlabel('t')
-        axs[0, i].set_ylim([-100, 35])
+        axs[0, i].set_ylim([1E-5, 100])
         axs[0, i].grid()
-        axs[0, i].legend()
-    
+        axs[0, i].legend(loc='upper left')
+
     # Second row: Applied current (I_app)
     for i in range(len(idx)):
         axs[1, i].plot(x_test_unscaled, esempio_test[i])

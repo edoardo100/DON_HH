@@ -9,7 +9,7 @@ batch_size: 100
 #### Architecture parameters
 scaling: "None" # Default, Gaussian, Mixed or Fourier
 scheduler: "StepLR"
-Loss: "L2" # mse or L2
+Loss: "L2" # mse H1, or L2
 epochs: 2000
 lr: 0.001
 #### FNO parameters
