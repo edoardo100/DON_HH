@@ -35,6 +35,7 @@ class Training():
                 self.optimizer.zero_grad() # annealing the gradient
                 out = self.model.forward((v,self.x_train)) # compute the output
                 # compute the loss
+                u.requires_grad = True
                 loss = self.loss(out, u)
                 train_loss += loss.item() # update the loss function
                 loss.backward() # automatic back propagation
@@ -53,14 +54,21 @@ class Training():
                     v, u = v.to(self.device), u.to(self.device)
                     if len(u.shape) > 2:
                         u = u.permute(2,0,1)
-                        out = self.model.forward((v,self.x_test))      
+                        out = self.model.forward((v, self.x_test))
                         test_l2 += L2relLossMultidim()(out, u).item()
                     if len(out.shape) == 2:
-                        out = self.model.forward((v,self.x_test))  
+                        out = self.model.forward((v, self.x_test))
                         test_l2 += L2relLoss()(out, u).item()
                         test_mse += MSE()(out, u).item()
-                        test_h1 += H1relLoss()(out, u).item()
-            
+
+            for v, u in self.test_loader:
+                v, u = v.to(self.device), u.to(self.device)
+                # Enable gradient calculation for H1 relative error
+                #out.requires_grad = True
+                u.requires_grad = True
+                out = self.model.forward((v, self.x_test))
+                test_h1 += H1relLoss()(out, u).item()
+                
             train_loss/= self.ntrain
             test_l2/= self.ntest
             test_mse/= self.ntest
