@@ -1,5 +1,6 @@
 from timeit import default_timer
 import torch
+import torch.profiler
 from .utility_dataset import *
 from .architectures import L2relLoss, L2relLossMultidim, MSE, H1relLoss
 
@@ -88,8 +89,24 @@ class Training():
                       f'Test_mse:{test_mse:.{5}f}  '
                       f'Test_loss_h1:{test_h1:.{5}f}'
                       )
-
-    def train(self):    
+    def train(self):
         t1 = default_timer()
+        # Profile the training function
+        #my_schedule = schedule(
+        #skip_first=3,
+        #wait=2,
+        #warmup=1,
+        #active=1)
+        #with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,torch.profiler.ProfilerActivity.CUDA],
+        #    record_shapes=True, profile_memory=True, schedule=my_schedule) as prof:
         for ep in range(self.epochs+1):
             self.single_train_step(ep,t1)
+               #prof.step()
+        #print(prof.key_averages().table(sort_by="cpu_memory_usage", row_limit=10))
+        #print(prof.key_averages().table(sort_by="cuda_memory_usage", row_limit=10))
+        # Calculate and print total memory allocated for CUDA and CPU
+        #max_cpu_mem = max([item.cpu_memory_usage for item in prof.key_averages()])
+        #max_cuda_mem = max([item.cuda_memory_usage for item in prof.key_averages()])
+
+        #print(f"Max CPU Memory consumption: {max_cpu_mem / (1024 * 1024)} MB")
+        #print(f"Max CUDA Memory consumption: {max_cuda_mem / (1024 * 1024)} MB")
