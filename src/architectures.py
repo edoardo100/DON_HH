@@ -35,9 +35,16 @@ def initializer(initial):
     }
     return initial_dict[initial]
 
-def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size):
-    # AdamW optimizer
-    optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = 1e-4)
+def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size,name="AdamW"):
+    if name=="L-BFGS":
+        optimizer = torch.optim.LBFGS(model.parameters(), lr=lr)
+    elif name=="AdamW":
+        optimizer = torch.optim.AdamW(model.parameters(), lr = lr, weight_decay = 1e-4)
+    else:
+        print("Invalid optimizer. Falling back to AdamW...")
+        name = "AdamW"
+        optimizer, schedulerName, scheduler = get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size,name)
+        return optimizer, schedulerName, scheduler
     # lr policy
     scheduler = None
     if schedulerName is not None:
@@ -56,7 +63,6 @@ def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size):
             raise ValueError("This scheduler has not been implemented yet.")
     else:
         schedulerName = "None"
-
     return optimizer, schedulerName, scheduler
 
 #########################################

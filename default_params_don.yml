@@ -12,8 +12,9 @@ scaling: "None"        # Default, Gaussian, Mixed or Fourier
 adapt_actfun: False
 scheduler: "StepLR"
 Loss: "L2"              # mse or L2
-epochs: 10000
+epochs: 20
 lr: 0.001
+optimizer: "L-BFGS" # "L-BFGS" or "AdamW"
 u_dim: 3   # Input dimension for Branch Net
 x_dim: 1   # Input dimension for Trunk Net
 G_dim: 500 # Output dimension

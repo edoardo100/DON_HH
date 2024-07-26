@@ -74,6 +74,7 @@ scheduler     = config.get("scheduler")
 Loss          = config.get("Loss")
 epochs        = config.get("epochs")
 lr            = config.get("lr")
+optim         = config.get("optimizer")
 # DeepONet hyper-parameters
 u_dim         = config.get("u_dim")
 x_dim         = config.get("x_dim")
@@ -192,7 +193,10 @@ if __name__=="__main__":
     par_tot = sum(p.numel() for p in model.parameters())
     print("Total trainable parameters: ", par_tot)
 
-    optimizer, schedulerName, scheduler = get_optimizer(model,lr,scheduler,epochs,u_train.shape[0],batch_size)
+    if optim==None:
+        optimizer, schedulerName, scheduler = get_optimizer(model,lr,scheduler,epochs,u_train.shape[0],batch_size)
+    else:
+        optimizer, schedulerName, scheduler = get_optimizer(model,lr,scheduler,epochs,u_train.shape[0],batch_size,optim)
 
     # Loss function
     myloss = get_loss(Loss)

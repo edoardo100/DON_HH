@@ -8,10 +8,11 @@ full_v_data: True
 batch_size: 100
 #### Architecture parameters
 scaling: "None" # Default, Gaussian, Mixed or Fourier
-scheduler: "StepLR"
+scheduler: "ReduceOnPlateau"
 Loss: "L2" # mse H1, or L2
-epochs: 2000
+epochs: 20
 lr: 0.001
+optimizer: "L-BFGS" # "L-BFGS" or "AdamW"
 #### FNO parameters
 d_a            : 2 
 d_v            : 32
