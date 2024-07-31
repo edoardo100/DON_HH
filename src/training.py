@@ -2,7 +2,7 @@ from timeit import default_timer
 import torch
 import torch.profiler
 from .utility_dataset import *
-from .architectures import L2relLoss, L2relLossMultidim, MSE, H1relLoss
+from .architectures import L2relLoss, L2relLossMultidim, MSE, H1relLoss_fourier
 
 class Training():
     def __init__(self, model, epochs, optimizer, schedulerName, scheduler, loss, 
@@ -73,10 +73,10 @@ class Training():
         for v, u in self.test_loader:
             v, u = v.to(self.device), u.to(self.device)
             # Enable gradient calculation for H1 relative error
-            #out.requires_grad = True
-            u.requires_grad = True
+            # out.requires_grad = True
+            # u.requires_grad = True
             out = self.model.forward((v, self.x_test))
-            test_h1 += H1relLoss()(out, u).item()
+            test_h1 += H1relLoss_fourier()(out, u).item()
             
         train_loss/= self.ntrain
         test_l2/= self.ntest

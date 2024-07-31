@@ -219,84 +219,88 @@ class MSE():
     def __call__(self, x, y):
         return self.mse(x, y)
 
-class H1relLoss():
+# class H1relLoss():
+#     def __init__(self):
+#         self.name = "H1_rel"
+    
+#     def get_name(self):
+#         return self.name
+    
+#     def rel(self, prediction, truth):
+#         # Ensure the inputs have the same shape
+#         assert prediction.shape == truth.shape, "Shape mismatch: prediction and truth must have the same shape"
+
+#         # Compute the L2 norm of the differences
+#         l2_norm_diff = torch.norm(prediction - truth, p=2, dim=1)
+
+#         # Compute the gradients of the prediction and truth
+#         grad_prediction = torch.autograd.grad(prediction, prediction, grad_outputs=torch.ones_like(prediction), create_graph=True)[0]
+#         grad_truth = torch.autograd.grad(truth, truth, grad_outputs=torch.ones_like(truth), create_graph=True)[0]
+
+#         # Compute the L2 norm of the gradient differences
+#         l2_norm_grad_diff = torch.norm(grad_prediction - grad_truth, p=2, dim=1)
+
+#         # Combine to get the H1 norm of the difference
+#         h1_norm_diff = l2_norm_diff + l2_norm_grad_diff
+
+#         # Compute the L2 norm of the truth
+#         l2_norm_truth = torch.norm(truth, p=2, dim=1)
+
+#         # Compute the gradient norm of the truth
+#         l2_norm_grad_truth = torch.norm(grad_truth, p=2, dim=1)
+
+#         # Combine to get the H1 norm of the truth
+#         h1_norm_truth = l2_norm_truth + l2_norm_grad_truth
+
+#         # Compute the relative error for each sample
+#         relative_error = h1_norm_diff / h1_norm_truth
+
+#         # Return the mean relative error
+#         return relative_error.sum()
+    
+#     def __call__(self, x, y):
+#         return self.rel(x, y)
+
+class H1relLoss_fourier():
     def __init__(self):
         self.name = "H1_rel"
-    
+   
     def get_name(self):
         return self.name
+   
+    """ Relative H^1 = W^{1,2} norm, in the equivalent Fourier formulation """
+    def rel(self, x, y, size_mean):
+        num_examples = x.size(0)
+
+        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
+        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
+        # check division by zero
+        if torch.any(y_norms <= 1e-5):
+            raise ValueError("Division by zero")
+
+        if size_mean:
+            return torch.mean(diff_norms/y_norms)
+        else:
+            return torch.sum(diff_norms/y_norms)
+
+    def __call__(self, x, y, beta = 1, size_mean = False):
+        n_t = x.size(1) 
+        # index
+        k = torch.cat((torch.arange(start = 0, end = n_t//2, step = 1),
+                       torch.arange(start = -n_t//2, end = 0, step = 1)), 
+                       0)
+        k = torch.abs(k).reshape(1, n_t)
+
+        # compute Fourier modes
+        x = torch.abs(torch.fft.fft(x, dim = 1))
+        y = torch.abs(torch.fft.fft(y, dim = 1))
+       
+        weight = 1 + beta*k**2 
+        weight = torch.sqrt(weight)
+        loss = self.rel(x*weight, y*weight, size_mean)
+ 
+        return loss
     
-    def rel(self, prediction, truth):
-        # Ensure the inputs have the same shape
-        assert prediction.shape == truth.shape, "Shape mismatch: prediction and truth must have the same shape"
-
-        # Compute the L2 norm of the differences
-        l2_norm_diff = torch.norm(prediction - truth, p=2, dim=1)
-
-        # Compute the gradients of the prediction and truth
-        grad_prediction = torch.autograd.grad(prediction, prediction, grad_outputs=torch.ones_like(prediction), create_graph=True)[0]
-        grad_truth = torch.autograd.grad(truth, truth, grad_outputs=torch.ones_like(truth), create_graph=True)[0]
-
-        # Compute the L2 norm of the gradient differences
-        l2_norm_grad_diff = torch.norm(grad_prediction - grad_truth, p=2, dim=1)
-
-        # Combine to get the H1 norm of the difference
-        h1_norm_diff = torch.sqrt(l2_norm_diff**2 + l2_norm_grad_diff**2)
-
-        # Compute the L2 norm of the truth
-        l2_norm_truth = torch.norm(truth, p=2, dim=1)
-
-        # Compute the gradient norm of the truth
-        grad_truth = torch.autograd.grad(truth, truth, grad_outputs=torch.ones_like(truth), create_graph=True)[0]
-        l2_norm_grad_truth = torch.norm(grad_truth, p=2, dim=1)
-
-        # Combine to get the H1 norm of the truth
-        h1_norm_truth = torch.sqrt(l2_norm_truth**2 + l2_norm_grad_truth**2)
-
-        # Compute the relative error for each sample
-        relative_error = h1_norm_diff / h1_norm_truth
-
-        # Return the mean relative error
-        return relative_error.mean()
-    
-    def __call__(self, x, y):
-        return self.rel(x, y)
-
-#class H1relLoss():
-#    def __init__(self):
-#        self.name = "H1_rel"
-#    
-#    def get_name(self):
-#        return self.name
-#    
-#    """ Relative H^1 = W^{1,2} norm, in the equivalent Fourier formulation """
-#    def rel(self, x, y, size_mean):
-#        num_examples = x.size()[0]
-#        diff_norms = torch.norm(x.reshape(num_examples,-1) - y.reshape(num_examples,-1), 2, 1)
-#        y_norms = torch.norm(y.reshape(num_examples,-1), 2, 1)
-#        if size_mean:
-#            return torch.mean(diff_norms/y_norms)
-#        else:
-#            return torch.sum(diff_norms/y_norms)
-#
-#    def __call__(self, x, y, beta = 1, size_mean = False):
-#        n_t = x.size(1) 
-#        # index
-#        k = torch.cat((torch.arange(start = 0, end = n_t//2, step = 1),
-#                       torch.arange(start = -n_t//2, end = 0, step = 1)), 
-#                       0).reshape(1, n_t)
-#        k = torch.abs(k)
-#
-#        # compute Fourier modes
-#        x = torch.fft.fft(x, dim = 1)
-#        y = torch.fft.fft(y, dim = 1)
-#        
-#        weight = 1 + beta*k**2 
-#        weight = torch.sqrt(weight)
-#        loss = self.rel(x*weight, y*weight, size_mean)
-#
-#        return loss
-
 def get_loss(Loss):
     if Loss == "L2":
         myloss = L2relLoss()

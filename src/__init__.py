@@ -32,7 +32,7 @@ __all__ = [
 
 from .architectures import activation, initializer, get_optimizer, get_loss
 from .architectures import FourierFeatures, AdaptFF, AdaptiveLinear, MLP, L2relLoss 
-from .architectures import MSE, H1relLoss, ResidualBlockCNN, ResNet, FNN, FNN_BN, FNN_LN, TimeDistributed, myGRU
+from .architectures import MSE, H1relLoss_fourier, ResidualBlockCNN, ResNet, FNN, FNN_BN, FNN_LN, TimeDistributed, myGRU
 from .don import DeepONet
 from .fno import FNO1d
 from .training import Training
