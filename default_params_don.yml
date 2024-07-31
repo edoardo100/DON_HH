@@ -1,25 +1,24 @@
 #### EXAMPLE OF yml FILE FOR DEEPONET
 #### Dataset parameters
-dataset_train: "dataset/datasetHH_test1_train.mat" 
-dataset_test: "dataset/datasetHH_test1_test.mat"
+dataset_train: "dataset/datasetHH_test2_train.mat"
+dataset_test: "dataset/datasetHH_test2_test.mat"
 arc: "DON"
 labels: False
 full_v_data: False
-N_FourierF: 0   # only for arc_t with fourier features
+N_FourierF: 0 # only for arc_t with fourier features
 batch_size: 100
 #### Architecture parameters
-scaling: "None"        # Default, Gaussian, Mixed or Fourier
-adapt_actfun: False
-scheduler: "StepLR"
-Loss: "L2"              # mse or L2
-epochs: 20
+scaling: "None" # Default, Gaussian, Mixed or Fourier
+adapt_actfun: True
+scheduler: "reduceonplateau"
+Loss: "L2" # mse or L2
+epochs: 10000
 lr: 0.001
-optimizer: "L-BFGS" # "L-BFGS" or "AdamW"
-u_dim: 3   # Input dimension for Branch Net
-x_dim: 1   # Input dimension for Trunk Net
-G_dim: 500 # Output dimension
-inner_layer_b: [500, 500, 500, 500]
-inner_layer_t: [500, 500]
+u_dim: 3 # Input dimension for Branch Net
+x_dim: 1 # Input dimension for Trunk Net
+G_dim: 700 # Output dimension
+inner_layer_b: [700, 700, 700, 700]
+inner_layer_t: [700, 700, 700]
 activation_b: "Tanh"
 activation_t: "Tanh"
 arc_b: "FNN_LN"
@@ -27,7 +26,7 @@ arc_t: "FNN_LN"
 initial_b: "Glorot normal"
 initial_t: "Glorot normal"
 #### Plotting and tensorboard
-show_every: 5 # epochs. Also saves on TensorboardX 
+show_every: 5 # epochs. Also saves on TensorboardX
 ep_step: 20
-idx: [7, 42, 45, 78] # random test sample
+idx: [7, 42, 93, 158]
 plotting: False

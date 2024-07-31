@@ -1,33 +1,32 @@
-#### EXAMPLE OF yml FILE FOR FOURIER NEURAL OPERATOR
+#### best of hyperparameters for FNO
 #### Dataset parameters
 arc: "FNO"
-dataset_train: "dataset/datasetHH_test2_train.mat" 
+dataset_train: "dataset/datasetHH_test2_train.mat"
 dataset_test: "dataset/datasetHH_test2_test.mat"
 labels: False
 full_v_data: True
 batch_size: 100
 #### Architecture parameters
 scaling: "None" # Default, Gaussian, Mixed or Fourier
-scheduler: "ReduceOnPlateau"
-Loss: "L2" # mse H1, or L2
-epochs: 20
+scheduler: "reduceonplateau"
+Loss: "L2" # mse, L2 or H1
+epochs: 2000
 lr: 0.001
-optimizer: "L-BFGS" # "L-BFGS" or "AdamW"
 #### FNO parameters
-d_a            : 2 
-d_v            : 32
-d_u            : 1
-L              : 4
-modes          : 16
-act_fun        : "ReLu"
-initialization : "Kaiming"
-scalar         : "Real" 
-padding        : True
-arc_fno        : "Classic"
-x_padding      : 10
-RNN            : False
+d_a: 2
+d_v: 32
+d_u: 1
+L: 3
+modes: 16
+act_fun: "ReLu"
+initialization: "Kaiming"
+scalar: "Complex"
+padding: True
+arc_fno: "Zongyi"
+x_padding: 10
+RNN: False
 #### Plotting and tensorboard
-show_every: 1 
+show_every: 1
 ep_step: 20
-idx: [7, 42, 45, 15] # random test sample
+idx: [7, 42, 93, 158] # random test sample
 plotting: False

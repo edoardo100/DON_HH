@@ -1,24 +1,24 @@
 #### EXAMPLE OF yml FILE FOR WAVELET NEURAL OPERATOR
 #### Dataset parameters
-#dataset_train: "dataset/datasetHH_test1_train.mat" 
-#dataset_test: "dataset/datasetHH_test1_test.mat"
-dataset_train: "dataset/datasetLR91_interp500.mat" 
-dataset_test: "dataset/datasetLR91_interp500.mat" 
+dataset_train: "dataset/datasetHH_test2_train.mat"
+dataset_test: "dataset/datasetHH_test2_test.mat"
+#dataset_train: "dataset/datasetLR91_interp500.mat"
+#dataset_test: "dataset/datasetLR91_interp500.mat"
 labels: False
 full_v_data: True
 batch_size: 100
 # WNO parameters
 arc: "WNO"
-level: 6
-width: 48
+level: 3
+width: 64
 #### Architecture parameters
 scaling: "None" # Default, Gaussian, Mixed or Fourier
-scheduler: "StepLR"
+scheduler: "reduceonplateau"
 Loss: "L2" # mse or L2
 epochs: 2000
 lr: 0.001
 #### Plotting and tensorboard
-show_every: 1 # epochs. Also saves on TensorboardX 
+show_every: 1 # epochs. Also saves on TensorboardX
 ep_step: 20
-idx: [7, 42, 45, 78] # random test sample
+idx: [159, 69, 258, 309]
 plotting: False
