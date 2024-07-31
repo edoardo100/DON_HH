@@ -309,7 +309,7 @@ def get_loss(Loss):
     elif Loss == "mse":
         myloss = MSE()
     elif Loss == 'H1':
-        myloss = H1relLoss()
+        myloss = H1relLoss_fourier()
     else:
         raise ValueError("Invalid Loss type provided.")
     return myloss

@@ -12,7 +12,7 @@ __all__ = [
     "MLP", 
     "L2relLoss", 
     "MSE", 
-    "H1relLoss", 
+    "H1relLoss_fourier", 
     "ResidualBlockCNN", 
     "ResNet", 
     "FNN", 
