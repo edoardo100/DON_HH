@@ -129,9 +129,9 @@ if __name__=="__main__":
     # Loss function
     myloss = get_loss(Loss)
 
-    modelname = "peano_test/model_" + param_file_name.replace("peano_test/", "")
+    modelname = "./model_" + param_file_name.replace("./", "")
 
-    model = torch.load(modelname, map_location=torch.device('cpu'))
+    model = torch.load(modelname)
 
     #### initial value of v
     u_test_unscaled, x_test_unscaled, v_test_unscaled = load_test(dataset_test,full_v_data=True)
@@ -141,12 +141,12 @@ if __name__=="__main__":
 
     esempio_test    = v_test_unscaled[idx, :].to('cpu')
     esempio_test_pp = v_test[idx, :].to('cpu')
-    sol_test        = u_test_unscaled[idx]
+    sol_test        = u_test_unscaled[idx].to('cpu')
     x_test_unscaled = x_test_unscaled.to('cpu')
     
     ## Third figure for approximation with DON of HH model
     with torch.no_grad():  # no grad for efficiency reasons
-        out_test = model((esempio_test_pp, x_test))
+        out_test = model((esempio_test_pp.to(mydevice), x_test.to(mydevice)))
         out_test = out_test.to('cpu')
     
     params = {'legend.fontsize': 12,
