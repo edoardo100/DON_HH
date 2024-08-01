@@ -18,8 +18,6 @@ import os
 import yaml
 import argparse
 import matplotlib.pyplot as plt
-# tensorboard and plotting
-from tensorboardX import SummaryWriter
 
 #########################################
 # default value
