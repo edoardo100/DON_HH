@@ -50,7 +50,7 @@ def get_optimizer(model,lr,schedulerName,epochs,ntrain,batch_size,name="AdamW"):
     if schedulerName is not None:
         if schedulerName.lower() == "steplr":
             # halved the learning rate every 100 epochs
-            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 100, gamma = 0.5)
+            scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size = 200, gamma = 0.5)
         elif schedulerName.lower() == "cosineannealinglr":
             # Cosine Annealing Scheduler (SGD with warm restart)
             iterations = epochs*(ntrain//batch_size)
