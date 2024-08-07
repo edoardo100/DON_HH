@@ -109,8 +109,8 @@ plotting   = config.get("plotting")
 if __name__=="__main__":
     # [159, 69, 134, 309]
     idx = torch.randint(low=0, high=400, size=(4,))
-    # 125
-    idx = torch.tensor([159, 69, 134, 309])
+    # 50 has 0 peaks
+    idx = torch.tensor([50, 309, 134, 159])
     print("indexes to print = "+str(idx))
     # Load dataset
     if "LR" in dataset_train:
@@ -129,10 +129,11 @@ if __name__=="__main__":
     # Loss function
     myloss = get_loss(Loss)
 
-    modelname = "./model_" + param_file_name.replace("./", "")
+    #modelname = "./model_" + param_file_name.replace("./", "")
+    modelname = "peano_test/model_" + param_file_name.replace("peano_test/", "")
 
-    model = torch.load(modelname)
-
+    #model = torch.load(modelname)
+    model = torch.load(modelname, map_location=torch.device('cpu'))
     #### initial value of v
     u_test_unscaled, x_test_unscaled, v_test_unscaled = load_test(dataset_test,full_v_data=True)
     # Same order of scaled data
@@ -155,36 +156,77 @@ if __name__=="__main__":
               'xtick.labelsize': 15,
               'ytick.labelsize': 15}
     plt.rcParams.update(params)
-    # Create a single figure with a grid layout
-    fig, axs = plt.subplots(2, len(idx), figsize=(16, 8), gridspec_kw={'height_ratios': [2, 1]})
     
-    # First row: Numerical approximation (V_m) and DON approximation (V_m)
-    #for i in range(len(idx)):
-    #    axs[0, i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
-    #    axs[0, i].plot(x_test_unscaled, out_test[i], 'r--', label=arc+' approximation')
-    #    axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=-5)
-    #    axs[0, i].set_xlabel('t')
-    #    axs[0, i].set_ylim([-100, 50])
-    #    axs[0, i].grid()
-    #    axs[0, i].legend(loc='upper left')
+    plot_error = False
+    plot_stimuli = True
+    plotname = ''
+    plot_plane = True
+    if not plot_plane:
+        # Create a single figure with a grid layout
+        if plot_stimuli==True:
+            fig, axs = plt.subplots(1, len(idx), figsize=(16, 2.6))
 
-    # OR First row: Error between Numerical approximation (V_m) and DON approximation (V_m)
-    for i in range(len(idx)):
-        axs[0, i].semilogy(x_test_unscaled, torch.abs(sol_test[i]-out_test[i]).to('cpu'), label='$|u_{NN}-u_{num}|$')
-        axs[0, 0].set_ylabel('$V_m$ (mV)', labelpad=5)
-        axs[0, i].set_xlabel('t')
-        axs[0, i].set_ylim([1E-5, 100])
-        axs[0, i].grid()
-        axs[0, i].legend(loc='upper left')
+            # First row: Applied current (I_app)
+            for i in range(len(idx)):
+                axs[i].plot(x_test_unscaled, esempio_test[i])
+                axs[0].set_ylabel('$I_{app}$(t)')
+                #axs[i].set_xlabel('t')
+                axs[i].set_ylim([-0.2, 10])
+                axs[i].grid()
+            plotname = 'Test_input.eps'
 
-    # Second row: Applied current (I_app)
-    for i in range(len(idx)):
-        axs[1, i].plot(x_test_unscaled, esempio_test[i])
-        axs[1, 0].set_ylabel('$I_{app}$(t)')
-        axs[1, i].set_xlabel('t')
-        axs[1, i].set_ylim([-0.2, 10])
-        axs[1, i].grid()
-    
+        else:
+            fig, axs = plt.subplots(1, len(idx), figsize=(16, 5.3))
+            if plot_error==False:
+                # Second row: Numerical approximation (V_m) and DON approximation (V_m)
+                for i in range(len(idx)):
+                    axs[i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
+                    axs[i].plot(x_test_unscaled, out_test[i], 'r--', label=arc+' approximation')
+                    axs[0].set_ylabel('$V_m$ (mV)', labelpad=-5)
+                    if arc=='WNO':
+                        axs[i].set_xlabel('t')
+                    axs[i].set_ylim([-100, 50])
+                    axs[i].grid()
+                    axs[i].legend(loc='upper left')
+                plotname = arc+param_file_name.replace("peano_test/"+arc.lower(), "") + '.eps'
+            else:
+                # OR Second row: Error between Numerical approximation (V_m) and DON approximation (V_m)
+                for i in range(len(idx)):
+                    axs[i].semilogy(x_test_unscaled, torch.abs(sol_test[i]-out_test[i]).to('cpu'), label='$|u_{NN}-u_{num}|$')
+                    axs[0].set_ylabel('$V_m$ (mV)', labelpad=5)
+                    if arc=='WNO':
+                        axs[i].set_xlabel('t')
+                    axs[i].set_ylim([1E-5, 100])
+                    axs[i].grid()
+                    axs[i].legend(loc='upper left')
+                plotname = arc+param_file_name.replace("peano_test/"+arc.lower(), "") + '_err' +'.eps'
+    else:
+        plotname = "HHpeaks.eps"
+        fig, axs = plt.subplots(2, len(idx), figsize=(16, 8), gridspec_kw={'height_ratios': [2, 1]})
+
+        # Second row: Applied current (I_app)
+        for i in range(len(idx)):
+            axs[1,i].plot(x_test_unscaled, esempio_test[i])
+            axs[1,0].set_ylabel('$I_{app}$(t)')
+            axs[1,i].set_xlabel('t')
+            axs[1,i].set_ylim([-0.2, 10])
+            if i!=0:
+                axs[1,i].set_yticks([])
+            #axs[1,i].grid()
+
+        # First row: Numerical approximation (V_m) and DON approximation (V_m)
+        for i in range(len(idx)):
+            axs[0,i].plot(x_test_unscaled, sol_test[i].to('cpu'), label='Numerical approximation')
+            axs[0,0].set_ylabel('$V_m$ (mV)', labelpad=-5)
+            axs[0,i].set_ylim([-100, 50])
+            axs[0,i].set_xticks([])
+            if i!=0:
+                axs[0,i].set_yticks([])
+            #axs[0,i].grid()
+            #axs[0,i].legend(loc='upper left')
+
+    print("Plot will be saved as: " + plotname)
     # Adjust layout to prevent overlap
     plt.tight_layout()
+    plt.savefig(plotname,format='eps')
     plt.show()

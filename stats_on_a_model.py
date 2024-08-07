@@ -19,6 +19,9 @@ import yaml
 import argparse
 import matplotlib.pyplot as plt
 
+fontsize_ticks = 20
+fontsize_title = 30
+fontsize_axis  = 28
 #########################################
 # default value
 #########################################
@@ -190,14 +193,15 @@ if __name__=="__main__":
     elif arc=='WNO':
         color = 'green'
     # Create a histogram of the error values
-    plt.figure(figsize=(6,4.5))
+    plt.figure(figsize=(8.5,8.5))
     label = formatted_pcg + "% test data have error > 10%"
     plt.hist(errors_thr, bins=50, edgecolor='white', color=color,label=label)
-    plt.xlabel('Relative L2 Error', fontsize=14)
-    plt.ylabel('Frequency', fontsize=14)
-    plt.title('Relative L2 Test Errors for ' + arc + '\nMedian = {:.3f}'.format(median), fontsize=16)
-    plt.xticks(fontsize=12)  # Adjust fontsize for x ticks
-    plt.yticks(fontsize=12)  # Adjust fontsize for y ticks
+    plt.xlabel('Relative L2 Error', fontsize=fontsize_axis)
+    if arc=="DON":
+        plt.ylabel('Frequency', fontsize=fontsize_axis)
+    plt.title('Relative L2 Test Errors for ' + arc + '\nMedian = {:.3f}'.format(median), fontsize=fontsize_title)
+    plt.xticks(fontsize=fontsize_ticks)  # Adjust fontsize for x ticks
+    plt.yticks(fontsize=fontsize_ticks)  # Adjust fontsize for y ticks
 
     # Print sorted results
     #print("Sorted Results (index, error):")
@@ -205,5 +209,7 @@ if __name__=="__main__":
     for index, err in results:
         if index in listindex:
             print(f"Index: {index}, Error: {err}")
-    plt.legend(fontsize='large')
+    plt.legend(fontsize=fontsize_axis-6)
+    plt.tight_layout()
+    plt.savefig("L2histo"+arc+".eps",format='eps')
     plt.show()

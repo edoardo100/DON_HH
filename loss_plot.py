@@ -4,8 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 fontsize_ticks = 20
-fontsize_title = 25
-fontsize_axis  = 22
+fontsize_title = 30
+fontsize_axis  = 28
 
 colors = ['#f19066',
           '#faded1',
@@ -67,29 +67,30 @@ if __name__ == "__main__":
     test_losses_std   = np.std(test_losses_array, axis=0)
 
     # Create a semilogy plot
-    plt.figure(figsize=(8.5, 6.5))
+    plt.figure(figsize=(8.5, 8.5))
     plt.semilogy(epochs, train_losses_list[0], label='Train Loss',linewidth=2.0, c=colors[0])
     plt.semilogy(epochs, test_losses_list[0] , label='Test Loss' ,linewidth=2.0, c=colors[2])
     plt.semilogy(epochs, train_losses_mean, '--', label='Train Loss mean',linewidth=1.0, c=colors[0])
     plt.semilogy(epochs, test_losses_mean , '--', label='Test Loss mean' ,linewidth=1.0, c=colors[2])
+    plt.ylim(0.005, 1)
     plt.fill_between(epochs, train_losses_mean-train_losses_std, train_losses_mean+train_losses_std,
     alpha=0.5, edgecolor=colors[1], facecolor=colors[1])
     plt.fill_between(epochs, test_losses_mean-test_losses_std, test_losses_mean+test_losses_std,
     alpha=0.5, edgecolor=colors[3], facecolor=colors[3])  
     plt.xlabel('Epoch',fontsize=fontsize_axis)
-    plt.ylabel('Loss' ,fontsize=fontsize_axis)
     arch = ''
     if 'don' in file_path:
         arch = 'don'
-        plt.title('DON',fontsize=fontsize_title)
+        #plt.title('DON',fontsize=fontsize_title)
+        plt.ylabel('Loss' ,fontsize=fontsize_axis)
     elif 'fno' in file_path:
         arch = 'fno'
-        plt.title('FNO',fontsize=fontsize_title)
+        #plt.title('FNO',fontsize=fontsize_title)
         plt.xticks([])
         plt.xticks([0,500,1000,1500,2000])
     elif 'wno' in file_path:
         arch = 'wno'
-        plt.title('WNO',fontsize=fontsize_title)
+        #plt.title('WNO',fontsize=fontsize_title)
         plt.xticks([])
         plt.xticks([0,500,1000,1500,2000])
     else:
@@ -98,5 +99,6 @@ if __name__ == "__main__":
     plt.xticks(fontsize=fontsize_ticks)
     plt.yticks(fontsize=fontsize_ticks)
     plt.grid(True)
+    plt.tight_layout()
     plt.savefig(arch+"_loss.eps",format='eps')
     plt.show()
